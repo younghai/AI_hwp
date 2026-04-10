@@ -88,9 +88,7 @@ textarea {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 24px;
+  display: block;
 }
 
 .workspace {
@@ -129,7 +127,6 @@ textarea {
 
 .hero-copy p:last-child,
 .narrative,
-.process-step p,
 .input-group span:last-child,
 #summary-meta {
   color: var(--muted);
@@ -139,36 +136,6 @@ textarea {
   font-size: clamp(1.9rem, 4vw, 3rem);
   line-height: 1.08;
   margin-bottom: 16px;
-}
-
-.process-rail {
-  display: grid;
-  gap: 14px;
-}
-
-.process-step {
-  padding: 18px 18px 18px 20px;
-  border-radius: 22px;
-  background: var(--surface-strong);
-  border: 1px solid rgba(13, 106, 97, 0.14);
-}
-
-.process-step span {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  margin-bottom: 10px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 700;
-}
-
-.process-step strong {
-  display: block;
-  margin-bottom: 6px;
 }
 
 .card-head,

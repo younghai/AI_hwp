@@ -289,6 +289,6 @@ runButton?.addEventListener("click", async () => {
 
 fillForm({
   sourceName: state.sourceName,
-  title: state.title,
+  title: "AI 기반 한글 문서 자동생성 서비스",
   toc: state.toc,
 });
