@@ -1,0 +1,12 @@
+.DS_Store
+.omx/
+__pycache__/
+*.pyc
+
+generated/
+runtime/
+unpacked/
+
+edited.hwpx
+result.hwpx
+document.hwpx
