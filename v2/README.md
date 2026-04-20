@@ -1,29 +1,116 @@
-# v2 Local Demo
+# v2 — AI Document Studio (HWP / HWPX Automation)
 
-v2는 v1 실험판을 유지한 채, `rhwp` 기반으로 `hwp`와 `hwpx`를 모두 업로드해 로컬 브라우저에서 파싱하고, 그 내용을 바탕으로 새 문서 초안을 만드는 localhost 데모입니다.
+업로드한 HWP / HWPX 문서를 브라우저에서 바로 파싱하고, AI가 생성한 초안을 **미리보기와 다운로드가 바이트 단위로 동일한 HWPX**로 내보내는 로컬호스트 애플리케이션입니다.
 
-## 핵심 차이
+> 🧭 **작업 시작 전 반드시 읽을 것**: [`CLAUDE.md`](./CLAUDE.md) — 절대 규칙(R1~R8), 실수 이력, 아키텍처 제약
+> 📚 **의사결정 배경**: [`docs/adr/`](./docs/adr/)
+> 📘 **실수 레지스트리**: [`docs/lessons-learned.md`](./docs/lessons-learned.md)
 
-- `hwp` / `hwpx` 동시 업로드
-- `rhwp` 기반 페이지 파싱 및 SVG 미리보기
-- 하드코딩 예시 버튼 대신 업로드 문서 기준 초안 생성
-- 별도 Docker 없이 localhost 실행
-- `.hwpx` 업로드 시 업로드한 양식을 템플릿으로 재사용
-- `.hwp` 업로드 시 업로드 본문을 분석하고 기본 HWPX 양식으로 새 문서 생성
+---
 
-## 실행
+## 🎯 핵심 원칙
+
+- **미리보기 = 다운로드** (ADR-0002) : 서버가 생성한 바로 그 HWPX 바이트를 rhwp로 렌더해 미리보기 → 사용자가 받는 파일과 완전 일치
+- **AI 섹션 1:1 매핑** (ADR-0003) : AI가 N섹션을 주면 HWPX에도 N섹션만. pad / 중복 / placeholder 누수 금지
+- **rhwp 버전 고정** (ADR-0001) : `@rhwp/core@0.7.2` exact pin. 업그레이드는 수동 승인만
+
+## 🚀 Quick Start
 
 ```bash
 cd v2
-npm install
-npm run dev
+npm install                                # workspace 설치 (client + server)
+cp server/.env.example server/.env         # API 키 채우기
+npm run dev                                # client(5188) + server(8788) 동시 실행
 ```
 
-- client: `http://localhost:5188`
-- server: `http://localhost:8788`
+- 클라이언트: http://127.0.0.1:5188
+- 서버 API : http://127.0.0.1:8788
 
-## 참고
+## 📂 폴더 구조
 
-- 문서 파싱/렌더링: [`rhwp`](https://github.com/edwardkim/rhwp)
-- 결과 파일 생성: 상위 폴더의 `scripts/build_hwpx.py`
+```
+v2/
+├── CLAUDE.md                   # 🧭 절대 규칙 + 실수 이력 (작업 시작점)
+├── shared/                     # client+server 공용 (escape, validate, docTypes)
+│
+├── server/                     # Express (Node.js)
+│   ├── index.js                # 부트스트랩 (~30줄)
+│   ├── lib/                    # errors, env, oauth, upload, providers-config, utils
+│   ├── services/               # ai, draft, hwpxBuilder
+│   └── routes/                 # health, providers, auth, draft, export
+│
+├── client/                     # React + Vite
+│   ├── src/
+│   │   ├── App.jsx             # 조합만 (~135줄)
+│   │   ├── lib/                # diagrams, helpers
+│   │   ├── hooks/              # useRhwp, useDraft, useProviders
+│   │   └── components/         # TopBar, ProviderSettings, ControlPanel,
+│   │                           # PreviewPanel, Uploader
+│   └── vite.config.js
+│
+├── docs/
+│   ├── adr/                    # Architecture Decision Records
+│   │   ├── 0001-rhwp-version-pinning.md
+│   │   ├── 0002-preview-download-byte-identity.md
+│   │   └── 0003-ai-content-integrity.md
+│   └── lessons-learned.md      # 실제 실수 레지스트리
+│
+├── skills/                     # 🛠 재사용 워크플로우 (markdown)
+│   ├── verify-preview-equals-download.md
+│   ├── dev-server-restart.md
+│   └── dependency-upgrade.md
+│
+├── hooks/                      # ⚙ 자동화 가드레일 (shell)
+│   ├── pre-completion-checklist.sh    # 완료 선언 전 강제 실행
+│   └── post-deps-change.sh            # package.json 변경 후 cleanup
+│
+└── tools/                      # 🔍 검증 스크립트
+    ├── smoke-test.sh                  # 6단계 E2E
+    └── verify-hwpx-markers.py         # HWPX 바이트 내 마커 검증
+```
 
+상위 repo의 `scripts/build_hwpx.py` (Python 워커) 가 서버에서 spawn 되어 최종 HWPX 를 생성합니다.
+
+## 🧪 검증 명령
+
+| 목적 | 명령 |
+|------|------|
+| **완료 선언 전 필수 검증** | `bash v2/hooks/pre-completion-checklist.sh` |
+| 단독 E2E 스모크 테스트 | `bash v2/tools/smoke-test.sh` |
+| HWPX 마커 검증 | `python3 v2/tools/verify-hwpx-markers.py <hwpx_path> MARKER1 ...` |
+| 클라이언트 프로덕션 빌드 | `cd v2/client && npm run build` |
+| 서버 syntax 체크 | `cd v2/server && for f in index.js lib/*.js services/*.js routes/*.js; do node --check "$f"; done` |
+
+## 🔁 의존성 변경 후 필수 절차
+
+`package.json` 수정, `npm install`, 또는 "이상한 캐시 문제" 체감 시:
+
+```bash
+bash v2/hooks/post-deps-change.sh   # 프로세스 kill + Vite cache 삭제
+cd v2 && npm run dev                # dev 서버 재시작
+# 브라우저에서 Cmd+Shift+R (하드 리프레시)
+bash v2/tools/smoke-test.sh         # 정상성 재검증
+```
+
+## 🎨 기능
+
+- **HWP/HWPX 업로드** — 드래그앤드롭 + 클릭, 파일 크기/페이지 수/형식 표시
+- **rhwp 로컬 파싱** — 첫 페이지 SVG 렌더, 본문 텍스트 추출
+- **AI 초안 생성** — Anthropic / OpenAI / Kimi / xAI (API 키 저장 + OAuth 지원)
+- **다이어그램 자동 삽입** — flowchart / timeline / comparison (cairo 설치 시)
+- **HWPX 내보내기** — 양식 유지 + AI 본문 치환, rhwp로 렌더 후 다운로드
+
+## 📜 Self-Learning Protocol
+
+프로젝트는 사용 중 **스스로 학습**하도록 설계:
+
+1. **실수 발생** → `docs/lessons-learned.md` 맨 위 항목 추가 + `CLAUDE.md` 관련 규칙에 이력 업데이트
+2. **같은 작업 반복** → `skills/<workflow>.md` 추가
+3. **망가지는 케이스** → `hooks/*.sh` 에 가드 + `tools/*` 에 검증 도구 추가
+
+자세한 사용법은 [`CLAUDE.md`](./CLAUDE.md) 참고.
+
+## 🔗 참고
+
+- 문서 파싱/렌더링: [`rhwp`](https://github.com/edwardkim/rhwp) (0.7.2 pinned)
+- HWPX 빌더: 상위 폴더의 [`scripts/build_hwpx.py`](../scripts/build_hwpx.py)

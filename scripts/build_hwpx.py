@@ -93,15 +93,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def normalize_toc(raw_toc: str | None, template_name: str) -> list[str]:
+    """Return TOC items in the same order provided by the caller.
+    - Preserves AI's exact section count (no padding with 추가 섹션 N).
+    - Template sections beyond len(toc) keep their original content.
+    - Falls back to the template's default TOC only when raw_toc is empty.
+    """
     if raw_toc:
         items = [item.strip() for item in raw_toc.replace("|", "\n").splitlines() if item.strip()]
     else:
         items = list(TEMPLATES[template_name]["default_toc"])
-
-    while len(items) < 5:
-        items.append(f"추가 섹션 {len(items) + 1}")
-
-    return items[:5]
+    return items
 
 
 def detect_heading_style_ids(header_xml: Path) -> frozenset[str]:
@@ -130,6 +131,98 @@ def _body_sentence(section: str, idx: int, title: str) -> str:
     return template.format(section=section, title=title)
 
 
+def _is_text_only_run(run: ET.Element) -> bool:
+    """Run contains only text-related children (no pictures, tables, ctrl chars)."""
+    for child in run:
+        local = child.tag.split('}')[-1]
+        if local not in ('t', 'lineBreak', 'tab', 'fwSpace', 'nbSpace'):
+            return False
+    return True
+
+
+def _paragraph_has_direct_text(p: ET.Element) -> bool:
+    """True iff the paragraph has at least one direct <hp:run> that is text-only
+    AND contains a non-empty <hp:t>. Excludes table-wrapper paragraphs whose
+    visible text lives inside nested cells."""
+    for run in p.findall(f"{{{HP}}}run"):
+        if not _is_text_only_run(run):
+            continue
+        for t in run.findall(f"{{{HP}}}t"):
+            if t.text and t.text.strip():
+                return True
+    return False
+
+
+def _direct_text_first(p: ET.Element) -> str:
+    """First non-empty text from a direct text-only run, used for matching meta/heading."""
+    for run in p.findall(f"{{{HP}}}run"):
+        if not _is_text_only_run(run):
+            continue
+        for t in run.findall(f"{{{HP}}}t"):
+            if t.text and t.text.strip():
+                return t.text.strip()
+    return ""
+
+
+def _normalize_paragraph(p: ET.Element, text: str) -> None:
+    """Replace paragraph content with a single text run.
+    - Removes additional <hp:run> elements (their stale charPr/text causes
+      visual overlap when the new text is shorter or longer than the original).
+    - Removes secondary text fragments inside the first run (lineBreak, extra <hp:t>).
+    - Resets the <hp:linesegarray> to a single segment so the renderer
+      computes line breaks based on the new text width, not the original."""
+    runs = p.findall(f"{{{HP}}}run")
+    if not runs:
+        return
+
+    text_runs = [r for r in runs if _is_text_only_run(r)]
+    if not text_runs:
+        return
+
+    first_run = text_runs[0]
+    t = first_run.find(f"{{{HP}}}t")
+    if t is None:
+        t = ET.SubElement(first_run, f"{{{HP}}}t")
+    t.text = text
+
+    # Remove other text-bearing children inside first run
+    for child in list(first_run):
+        if child is t:
+            continue
+        local = child.tag.split('}')[-1]
+        if local in ('t', 'lineBreak', 'tab', 'fwSpace', 'nbSpace'):
+            first_run.remove(child)
+
+    # Remove all other text-only runs in this paragraph
+    for extra in text_runs[1:]:
+        p.remove(extra)
+
+    # Reset linesegarray so HWPX renderer reflows the new text width
+    lineseg_array = p.find(f"{{{HP}}}linesegarray")
+    if lineseg_array is not None:
+        segs = lineseg_array.findall(f"{{{HP}}}lineseg")
+        for s in segs[1:]:
+            lineseg_array.remove(s)
+        if segs:
+            segs[0].set('textpos', '0')
+
+
+def _split_body_sentences(body_text: str) -> list[str]:
+    """Split AI body text into sentence-sized chunks for paragraph distribution."""
+    if not body_text:
+        return []
+    normalized = body_text.replace('. ', '.\n').replace('? ', '?\n').replace('! ', '!\n')
+    return [s.strip() for s in normalized.splitlines() if s.strip()]
+
+
+def _clone_paragraph_for_text(template_p: ET.Element, text: str) -> ET.Element:
+    """Deep-copy a paragraph element and normalize it with the given text."""
+    from copy import deepcopy
+    clone = deepcopy(template_p)
+    _normalize_paragraph(clone, text)
+    return clone
+
+
 def apply_smart_replacements(
     working_dir: Path,
     title: str,
@@ -137,8 +230,9 @@ def apply_smart_replacements(
     source_document: str,
     sections_body: dict[str, str] | None = None,
 ) -> None:
-    """스타일 기반으로 제목·섹션 헤딩·본문을 치환합니다.
-    업로드된 임의 HWPX 템플릿에도 동작합니다."""
+    """Two-pass replacement that maps AI-generated content to template
+    sections by INDEX (not name lookup), then normalizes each paragraph
+    to remove stale runs/positioning that cause visual overlap."""
     header_path = working_dir / "Contents" / "header.xml"
     section_path = working_dir / "Contents" / "section0.xml"
 
@@ -148,63 +242,89 @@ def apply_smart_replacements(
     tree = ET.parse(section_path)
     root = tree.getroot()
 
-    # 문서 순서대로 (paragraph, styleIDRef, text노드 목록) 수집
-    paras: list[tuple[ET.Element, str, list[ET.Element]]] = []
+    # Build parent map for paragraph insertion later
+    parent_of = {child: parent for parent in root.iter() for child in parent}
+
+    # Pass 1: classify each paragraph
+    # Skip wrapper paragraphs (whose text lives inside nested tables) by
+    # requiring a direct text-only run with non-empty text.
+    title_para: ET.Element | None = None
+    meta_para: ET.Element | None = None
+    sections: list[dict] = []  # [{'heading_p', 'body_ps'}]
+    current: dict | None = None
+
     for p in root.iter(f"{{{HP}}}p"):
+        if not _paragraph_has_direct_text(p):
+            continue
         style_id = p.get("styleIDRef", "0")
-        t_nodes = [t for t in p.findall(f".//{{{HP}}}t") if t.text and t.text.strip()]
-        if t_nodes:
-            paras.append((p, style_id, t_nodes))
+        text_first = _direct_text_first(p)
 
-    title_done = False
-    meta_done = False
-    toc_idx = 0
-    current_section = -1
-    body_idx = 0
-
-    for _p, style_id, t_nodes in paras:
-        text = (t_nodes[0].text or "").strip()
-
-        # 1. 제목: 문서 첫 번째 텍스트 노드
-        if not title_done:
-            t_nodes[0].text = title
-            title_done = True
+        if title_para is None:
+            title_para = p
             continue
-
-        # 2. 원본 문서 메타 라인: '<...' 패턴
-        if not meta_done and text.startswith("<"):
-            t_nodes[0].text = f"<원본문서 : {source_document}, {now_label}>"
-            meta_done = True
+        if meta_para is None and text_first.startswith("<"):
+            meta_para = p
             continue
-
-        # 3. 섹션 헤딩: styleIDRef 가 헤딩 스타일에 해당
         if style_id in heading_ids:
-            if toc_idx < len(toc):
-                t_nodes[0].text = toc[toc_idx]
-                current_section = toc_idx
-                toc_idx += 1
-                body_idx = 0
-            # toc 소진 후 남은 헤딩(붙임 등)은 원본 유지
+            if current is not None:
+                sections.append(current)
+            current = {'heading_p': p, 'body_ps': []}
             continue
+        if current is not None:
+            current['body_ps'].append(p)
 
-        # 4. 본문 단락: 섹션 진입 후, 헤딩 스타일이 아닌 모든 단락
-        # styleIDRef="0"(바탕글)도 본문이므로 포함
-        if current_section >= 0 and style_id not in heading_ids:
-            section_name = toc[current_section]
-            if sections_body and section_name in sections_body:
-                # AI 생성 본문을 문장 단위로 분배
-                body_text = sections_body[section_name]
-                sentences = [s.strip() for s in body_text.replace('. ', '.\n').splitlines() if s.strip()]
-                if body_idx < len(sentences):
-                    t_nodes[0].text = sentences[body_idx]
-                else:
-                    t_nodes[0].text = sentences[-1] if sentences else _body_sentence(section_name, body_idx, title)
-            else:
-                t_nodes[0].text = _body_sentence(section_name, body_idx, title)
-            body_idx += 1
-            continue
+    if current is not None:
+        sections.append(current)
 
-        # 5. 나머지(푸터·헤더 등): 원본 유지
+    # Pass 2: replace
+    if title_para is not None:
+        _normalize_paragraph(title_para, title)
+    if meta_para is not None:
+        _normalize_paragraph(meta_para, f"<원본문서 : {source_document}, {now_label}>")
+
+    sections_body = sections_body or {}
+
+    for i, sec in enumerate(sections):
+        if i >= len(toc):
+            break
+        section_name = toc[i]
+
+        # Replace heading text with TOC entry
+        _normalize_paragraph(sec['heading_p'], section_name)
+
+        # Pull AI body text by INDEX-aligned heading lookup, then by name
+        # (sections_body keys are AI section headings; toc[i] equals the i-th
+        # AI heading because the server passes draft.toc = sections.map(s.heading))
+        ai_body = sections_body.get(section_name, "")
+        sentences = _split_body_sentences(ai_body)
+
+        body_ps = sec['body_ps']
+        body_count = len(body_ps)
+
+        # Distribute AI sentences 1:1 across body paragraphs.
+        # - sentences > slots: clone the last body paragraph for the overflow (below)
+        # - sentences < slots: fill first N, clear the remaining body slots (so the
+        #   output contains only what the preview shows — no duplicated sentences
+        #   and no template placeholder text bleeding through)
+        for body_p, sentence in zip(body_ps, sentences):
+            _normalize_paragraph(body_p, sentence)
+        if body_count > len(sentences):
+            for extra_p in body_ps[len(sentences):]:
+                _normalize_paragraph(extra_p, "")
+
+        if len(sentences) > body_count and body_ps:
+            template_body = body_ps[-1]
+            parent = parent_of.get(template_body)
+            if parent is not None:
+                insert_idx = list(parent).index(template_body) + 1
+                for k, extra_sentence in enumerate(sentences[body_count:]):
+                    clone = _clone_paragraph_for_text(template_body, extra_sentence)
+                    parent.insert(insert_idx + k, clone)
+                    # Track in parent_of so future operations work
+                    for child in clone.iter():
+                        for grand in child:
+                            parent_of[grand] = child
+                    parent_of[clone] = parent
 
     tree.write(section_path, encoding="utf-8", xml_declaration=True)
 
@@ -246,11 +366,22 @@ def embed_diagrams(
     working_dir: Path,
     diagrams: list[dict],
 ) -> None:
-    """Generate PNG diagrams and embed them into the HWPX document."""
+    """Generate PNG diagrams and embed them into the HWPX document.
+
+    Gracefully skips if cairosvg cannot be imported — typically because the
+    native `libcairo` is missing. On macOS install with `brew install cairo`;
+    on Debian/Ubuntu `apt-get install libcairo2`; on Windows use GTK runtime.
+    """
     try:
         import cairosvg
-    except ImportError:
-        logging.warning("cairosvg not installed — skipping diagram embedding")
+    except (ImportError, OSError) as exc:
+        logging.warning(
+            "cairosvg unavailable (%s) — skipping diagram embedding. "
+            "Install with: macOS 'brew install cairo', "
+            "Ubuntu 'apt-get install libcairo2', "
+            "or remove diagrams from the AI prompt.",
+            exc
+        )
         return
 
     section_path = working_dir / "Contents" / "section0.xml"

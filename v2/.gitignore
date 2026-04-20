@@ -1,6 +1,29 @@
+# Node
 node_modules/
 client/node_modules/
 server/node_modules/
+
+# Build artifacts
 client/dist/
+
+# Generated HWPX output (per-run, do not track)
 generated/
 
+# Runtime / session state (OMC and logs)
+.omc/
+**/.omc/
+*.log
+
+# Secrets — use server/.env.example as template
+.env
+server/.env
+.env.local
+.env.*.local
+
+# OS noise
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
