@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
+import logging
 import sys
 import tempfile
+import unicodedata
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
@@ -14,20 +17,24 @@ if str(OFFICE_DIR) not in sys.path:
     sys.path.insert(0, str(OFFICE_DIR))
 
 from hwpx_utils import pack_hwpx, unpack_hwpx
+from diagram_templates import render_diagram, CANVAS_W_MM, CANVAS_H_MM, MM
 
+
+HP = "http://www.hancom.co.kr/hwpml/2011/paragraph"
+HH = "http://www.hancom.co.kr/hwpml/2011/head"
 
 NAMESPACES = {
     "opf": "http://www.idpf.org/2007/opf/",
-    "hp": "http://www.hancom.co.kr/hwpml/2011/paragraph",
+    "hp": HP,
 }
 
 for prefix, uri in {
     "ha": "http://www.hancom.co.kr/hwpml/2011/app",
-    "hp": "http://www.hancom.co.kr/hwpml/2011/paragraph",
+    "hp": HP,
     "hp10": "http://www.hancom.co.kr/hwpml/2016/paragraph",
     "hs": "http://www.hancom.co.kr/hwpml/2011/section",
     "hc": "http://www.hancom.co.kr/hwpml/2011/core",
-    "hh": "http://www.hancom.co.kr/hwpml/2011/head",
+    "hh": HH,
     "hhs": "http://www.hancom.co.kr/hwpml/2011/history",
     "hm": "http://www.hancom.co.kr/hwpml/2011/master-page",
     "hpf": "http://www.hancom.co.kr/schema/2011/hpf",
@@ -54,6 +61,24 @@ TEMPLATES = {
     }
 }
 
+# 섹션 본문 자동 생성 문장 풀
+_BODY_SENTENCES = [
+    "{section}의 추진 배경과 필요성을 원본 서식에 맞게 기술합니다.",
+    "{title}의 기대 효과와 주요 성과 지표를 한 페이지로 요약합니다.",
+    "{section} 관련 현황 분석 및 주요 시사점을 정리합니다.",
+    "{section} 실행을 위한 세부 추진 방안을 단계별로 기술합니다.",
+    "원본 문서 스타일을 유지하며 {section} 핵심 내용을 작성합니다.",
+    "{section} 추진 시 고려할 주요 조건과 평가 기준을 명시합니다.",
+    "{section} 완료 후 후속 조치 및 점검 항목을 기술합니다.",
+    "{section}의 담당 부서와 협력 기관의 역할을 정의합니다.",
+]
+
+# 레벨1 헤딩을 나타내는 스타일 이름 패턴 (소문자 비교)
+_HEADING1_PATTERNS = [
+    "레벨1", "level 1", "level1", "heading 1", "heading1",
+    "제목 1", "제목1", "개요 제목", "outline heading",
+]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build a demo HWPX document from a template.")
@@ -63,6 +88,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--title", help="Document title")
     parser.add_argument("--toc", help="Pipe-separated or newline-separated table of contents")
     parser.add_argument("--source-document", default="document.hwpx", help="Name of the source document")
+    parser.add_argument("--sections-json", help="JSON file with AI-generated sections [{heading, body}, ...]")
     return parser.parse_args()
 
 
@@ -78,56 +104,109 @@ def normalize_toc(raw_toc: str | None, template_name: str) -> list[str]:
     return items[:5]
 
 
-def build_text_plan(title: str, toc: list[str], source_document: str) -> list[str]:
+def detect_heading_style_ids(header_xml: Path) -> frozenset[str]:
+    """header.xml 의 스타일 이름을 분석해 섹션 헤딩에 해당하는 styleIDRef 집합을 반환합니다.
+    인식 불가 시 {'1'} 을 기본값으로 반환합니다."""
+    try:
+        tree = ET.parse(header_xml)
+        root = tree.getroot()
+        ids: set[str] = set()
+        for style in root.findall(f".//{{{HH}}}style"):
+            name = style.get("name", "").lower().strip()
+            eng = style.get("engName", "").lower().strip()
+            combined = name + " " + eng
+            if any(pattern in combined for pattern in _HEADING1_PATTERNS):
+                sid = style.get("id", "")
+                if sid:
+                    ids.add(sid)
+        return frozenset(ids) if ids else frozenset({"1"})
+    except Exception as exc:
+        logging.warning("detect_heading_style_ids failed: %s", exc)
+        return frozenset({"1"})
+
+
+def _body_sentence(section: str, idx: int, title: str) -> str:
+    template = _BODY_SENTENCES[idx % len(_BODY_SENTENCES)]
+    return template.format(section=section, title=title)
+
+
+def apply_smart_replacements(
+    working_dir: Path,
+    title: str,
+    toc: list[str],
+    source_document: str,
+    sections_body: dict[str, str] | None = None,
+) -> None:
+    """스타일 기반으로 제목·섹션 헤딩·본문을 치환합니다.
+    업로드된 임의 HWPX 템플릿에도 동작합니다."""
+    header_path = working_dir / "Contents" / "header.xml"
+    section_path = working_dir / "Contents" / "section0.xml"
+
+    heading_ids = detect_heading_style_ids(header_path)
     now_label = datetime.now().strftime("%Y.%m.%d")
-    short_title = title.replace("제안서", "").strip()
 
-    return [
-        title,
-        "AI 스타일 치환 초안",
-        f"<원본문서 : {source_document}, {now_label}>",
-        toc[0],
-        "기존 HWPX의 문단 구조를 유지한 채 새 제목과 목차를 반영합니다.",
-        f"{short_title}의 목적과 기대효과를 한 페이지 요약 형태로 정리합니다.",
-        toc[1],
-        "원본 XML에서 비어있지 않은 텍스트 노드를 순서대로 분석합니다.",
-        "표, 문단, 글꼴 ID는 유지하고 본문 텍스트만 교체합니다.",
-        "목차에 맞는 섹션 문장을 생성해 템플릿 위치에 다시 삽입합니다.",
-        toc[2],
-        "원본 양식의 승인 흐름과 페이지 구성을 그대로 재사용합니다.",
-        "섹션별 요약 문단과 핵심 bullet을 자동 생성합니다.",
-        "검토용 수정 포인트를 별도 첨부 없이 문서 내부에 반영합니다.",
-        toc[3],
-        "원본 분석 : 완료",
-        "스타일 추출 : 완료",
-        "본문 치환 : 자동 생성",
-        toc[4],
-        "승인 전 제목, 목차, 일정 문구를 최종 확인합니다.",
-        "필요 시 원본 부서명과 날짜만 후속 수정합니다.",
-        "편집 완료 후 HWPX로 재패키징해 배포합니다.",
-        "붙임1 참고",
-        "붙임",
-        f"{short_title} 일정",
-        "개요",
-        "구조 유지",
-        "일정",
-    ]
-
-
-def apply_text_replacements(section_xml: Path, replacements: list[str]) -> None:
-    tree = ET.parse(section_xml)
+    tree = ET.parse(section_path)
     root = tree.getroot()
-    text_nodes = [node for node in root.findall(".//hp:t", NAMESPACES) if node.text and node.text.strip()]
 
-    if len(text_nodes) < len(replacements):
-        raise SystemExit(
-            f"Template does not contain enough text nodes for replacement: {len(text_nodes)} < {len(replacements)}"
-        )
+    # 문서 순서대로 (paragraph, styleIDRef, text노드 목록) 수집
+    paras: list[tuple[ET.Element, str, list[ET.Element]]] = []
+    for p in root.iter(f"{{{HP}}}p"):
+        style_id = p.get("styleIDRef", "0")
+        t_nodes = [t for t in p.findall(f".//{{{HP}}}t") if t.text and t.text.strip()]
+        if t_nodes:
+            paras.append((p, style_id, t_nodes))
 
-    for index, replacement in enumerate(replacements):
-        text_nodes[index].text = replacement
+    title_done = False
+    meta_done = False
+    toc_idx = 0
+    current_section = -1
+    body_idx = 0
 
-    tree.write(section_xml, encoding="utf-8", xml_declaration=True)
+    for _p, style_id, t_nodes in paras:
+        text = (t_nodes[0].text or "").strip()
+
+        # 1. 제목: 문서 첫 번째 텍스트 노드
+        if not title_done:
+            t_nodes[0].text = title
+            title_done = True
+            continue
+
+        # 2. 원본 문서 메타 라인: '<...' 패턴
+        if not meta_done and text.startswith("<"):
+            t_nodes[0].text = f"<원본문서 : {source_document}, {now_label}>"
+            meta_done = True
+            continue
+
+        # 3. 섹션 헤딩: styleIDRef 가 헤딩 스타일에 해당
+        if style_id in heading_ids:
+            if toc_idx < len(toc):
+                t_nodes[0].text = toc[toc_idx]
+                current_section = toc_idx
+                toc_idx += 1
+                body_idx = 0
+            # toc 소진 후 남은 헤딩(붙임 등)은 원본 유지
+            continue
+
+        # 4. 본문 단락: 섹션 진입 후, 헤딩 스타일이 아닌 모든 단락
+        # styleIDRef="0"(바탕글)도 본문이므로 포함
+        if current_section >= 0 and style_id not in heading_ids:
+            section_name = toc[current_section]
+            if sections_body and section_name in sections_body:
+                # AI 생성 본문을 문장 단위로 분배
+                body_text = sections_body[section_name]
+                sentences = [s.strip() for s in body_text.replace('. ', '.\n').splitlines() if s.strip()]
+                if body_idx < len(sentences):
+                    t_nodes[0].text = sentences[body_idx]
+                else:
+                    t_nodes[0].text = sentences[-1] if sentences else _body_sentence(section_name, body_idx, title)
+            else:
+                t_nodes[0].text = _body_sentence(section_name, body_idx, title)
+            body_idx += 1
+            continue
+
+        # 5. 나머지(푸터·헤더 등): 원본 유지
+
+    tree.write(section_path, encoding="utf-8", xml_declaration=True)
 
 
 def update_preview(preview_path: Path, title: str, toc: list[str], source_document: str) -> None:
@@ -163,13 +242,164 @@ def update_metadata(content_hpf: Path, title: str) -> None:
     tree.write(content_hpf, encoding="utf-8", xml_declaration=True)
 
 
+def embed_diagrams(
+    working_dir: Path,
+    diagrams: list[dict],
+) -> None:
+    """Generate PNG diagrams and embed them into the HWPX document."""
+    try:
+        import cairosvg
+    except ImportError:
+        logging.warning("cairosvg not installed — skipping diagram embedding")
+        return
+
+    section_path = working_dir / "Contents" / "section0.xml"
+    content_hpf  = working_dir / "Contents" / "content.hpf"
+    bin_dir      = working_dir / "BinData"
+    bin_dir.mkdir(exist_ok=True)
+
+    tree = ET.parse(section_path)
+    root = tree.getroot()
+
+    # Collect all paragraphs in document order
+    all_paras = list(root.iter(f"{{{HP}}}p"))
+
+    hpf_tree = ET.parse(content_hpf)
+    hpf_root = hpf_tree.getroot()
+    manifest_ns = "http://www.idpf.org/2007/opf/"
+
+    bin_counter = 1
+
+    # Find existing BIN IDs to avoid collision
+    existing_ids = set()
+    for item in hpf_root.iter(f"{{{manifest_ns}}}item"):
+        existing_ids.add(item.get("id", ""))
+    while f"BIN{bin_counter:04d}" in existing_ids:
+        bin_counter += 1
+
+    # Page content width in HWPU (A4 = 59528 wide, margins ~11338, usable ~47341+border)
+    # From section0.xml observed: usable horzsize ≈ 48188
+    PAGE_HORZSIZE = 48188
+
+    # Diagram dimensions in HWPU
+    diag_w = int(CANVAS_W_MM * MM)   # 160mm
+    diag_h = int(CANVAS_H_MM * MM)   # 80mm
+
+    for diag_spec in diagrams:
+        after_section = diag_spec.get("afterSection", "")
+        svg_str = render_diagram(diag_spec)
+        if not svg_str:
+            logging.warning("render_diagram returned None for spec: %s", diag_spec)
+            continue
+
+        # Convert SVG → PNG
+        bin_id   = f"BIN{bin_counter:04d}"
+        png_name = f"{bin_id}.png"
+        png_path = bin_dir / png_name
+        try:
+            cairosvg.svg2png(
+                bytestring=svg_str.encode("utf-8"),
+                write_to=str(png_path),
+                output_width=605,
+                output_height=302,
+            )
+        except Exception as exc:
+            logging.warning("cairosvg failed for diagram %s: %s", bin_id, exc)
+            continue
+
+        bin_counter += 1
+
+        # Register in content.hpf manifest
+        item_el = ET.SubElement(hpf_root, f"{{{manifest_ns}}}item")
+        item_el.set("id", bin_id)
+        item_el.set("href", f"BinData/{png_name}")
+        item_el.set("media-type", "image/png")
+
+        # Find the insertion point: paragraph after `after_section` heading
+        insert_after_para = None
+        if after_section:
+            for para in all_paras:
+                t_nodes = [t for t in para.findall(f".//{{{HP}}}t") if t.text]
+                for t in t_nodes:
+                    if after_section in (t.text or ""):
+                        insert_after_para = para
+                        break
+                if insert_after_para is not None:
+                    break
+
+        # Build <hp:p> containing <hp:pic>
+        pic_id = bin_counter * 1000 + 1  # arbitrary unique numeric ID
+
+        new_para_str = (
+            f'<hp:p xmlns:hp="{HP}" id="0" paraPrIDRef="0" styleIDRef="0"'
+            f' pageBreak="0" columnBreak="0" merged="0">'
+            f'<hp:run charPrIDRef="0">'
+            f'<hp:pic id="{pic_id}" zOrder="0" numberingType="NONE"'
+            f' textWrap="TOP_AND_BOTTOM" textFlow="BOTH_SIDES"'
+            f' lock="0" dropcapstyle="None">'
+            f'<hp:sz width="{diag_w}" widthRelTo="ABSOLUTE"'
+            f' height="{diag_h}" heightRelTo="ABSOLUTE" protect="0"/>'
+            f'<hp:pos treatAsChar="1" affectLSpacing="0" flowWithText="1"'
+            f' allowOverlap="0" holdAnchorAndSO="0"'
+            f' vertRelTo="PARA" horzRelTo="PARA"'
+            f' vertAlign="TOP" horzAlign="LEFT" vertOffset="0" horzOffset="0"/>'
+            f'<hp:outMargin left="0" right="0" top="283" bottom="283"/>'
+            f'<hp:imgObject binItemID="{bin_id}" transparency="0" flipx="0" flipy="0">'
+            f'<hp:winAlt left="0" right="0" top="0" bottom="0"/>'
+            f'<hp:effects/>'
+            f'<hp:imgFormat fileType="PNG" bitmapType="UNKNOWN" transparentColor="-1"/>'
+            f'</hp:imgObject>'
+            f'</hp:pic>'
+            f'<hp:t/>'
+            f'</hp:run>'
+            f'<hp:linesegarray>'
+            f'<hp:lineseg textpos="0" vertpos="0" vertsize="{diag_h}"'
+            f' textheight="{diag_h}" baseline="{int(diag_h * 0.85)}"'
+            f' spacing="283" horzpos="0" horzsize="{PAGE_HORZSIZE}" flags="393216"/>'
+            f'</hp:linesegarray>'
+            f'</hp:p>'
+        )
+
+        new_para = ET.fromstring(new_para_str)
+
+        # Insert after the target paragraph in the tree
+        parent = root  # section root contains paragraphs directly
+        para_list = list(parent)
+        if insert_after_para is not None and insert_after_para in para_list:
+            idx = para_list.index(insert_after_para)
+            parent.insert(idx + 1, new_para)
+        else:
+            # Append at end of section
+            parent.append(new_para)
+
+    tree.write(section_path, encoding="utf-8", xml_declaration=True)
+    hpf_tree.write(content_hpf, encoding="utf-8", xml_declaration=True)
+
+
+def load_sections_body(json_path: str | None) -> tuple[dict[str, str] | None, list[dict]]:
+    """Returns (sections_body_dict, diagrams_list)."""
+    if not json_path:
+        return None, []
+    try:
+        data = json.loads(Path(json_path).read_text(encoding="utf-8"))
+        sections = {s["heading"]: s["body"] for s in data if "heading" in s and "body" in s}
+        diagrams = [d for d in data if d.get("_diagram") is True]
+        return sections, diagrams
+    except Exception as exc:
+        logging.warning("load_sections_body failed: %s", exc)
+        return None, []
+
+
 def main() -> None:
     args = parse_args()
     template = TEMPLATES[args.template]
     template_path = Path(args.template_file).expanduser().resolve() if args.template_file else template["path"]
-    title = args.title or template["default_title"]
+    title = unicodedata.normalize('NFC', args.title or template["default_title"])
     toc = normalize_toc(args.toc, args.template)
+    toc = [unicodedata.normalize('NFC', item) for item in toc]
+    source_document = unicodedata.normalize('NFC', args.source_document)
     output = Path(args.output).expanduser().resolve()
+    sections_body, diagrams = load_sections_body(args.sections_json)
 
     if not template_path.exists():
         raise SystemExit(f"Template file not found: {template_path}")
@@ -178,9 +408,10 @@ def main() -> None:
         working_dir = Path(temp_dir)
         unpack_hwpx(template_path, working_dir)
 
-        replacements = build_text_plan(title, toc, args.source_document)
-        apply_text_replacements(working_dir / "Contents" / "section0.xml", replacements)
-        update_preview(working_dir / "Preview" / "PrvText.txt", title, toc, args.source_document)
+        apply_smart_replacements(working_dir, title, toc, source_document, sections_body)
+        if diagrams:
+            embed_diagrams(working_dir, diagrams)
+        update_preview(working_dir / "Preview" / "PrvText.txt", title, toc, source_document)
         update_metadata(working_dir / "Contents" / "content.hpf", title)
 
         pack_hwpx(working_dir, output)

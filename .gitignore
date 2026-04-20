@@ -1,5 +1,6 @@
 .DS_Store
 .omx/
+.omc/
 __pycache__/
 *.pyc
 
@@ -10,3 +11,11 @@ unpacked/
 edited.hwpx
 result.hwpx
 document.hwpx
+
+# Secrets
+.env
+.env.*
+*.env
+
+# Dependencies
+node_modules/
