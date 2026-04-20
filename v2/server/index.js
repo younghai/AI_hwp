@@ -13,7 +13,7 @@ const AI_PROVIDERS = {
   anthropic: {
     label: 'Anthropic Claude',
     baseUrl: 'https://api.anthropic.com/v1/messages',
-    defaultModel: 'claude-opus-4-6',
+    defaultModel: 'claude-opus-4-7',
     envKey: 'ANTHROPIC_API_KEY',
     oauth: null
   },
