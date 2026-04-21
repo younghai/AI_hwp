@@ -6,6 +6,7 @@ import { PreviewPanel } from './components/PreviewPanel.jsx'
 import { useProviders } from './hooks/useProviders.js'
 import { useRhwp } from './hooks/useRhwp.js'
 import { useDraft } from './hooks/useDraft.js'
+import { useAuth } from './hooks/useAuth.js'
 
 export default function App() {
   const previewPanelRef = useRef(null)
@@ -18,6 +19,8 @@ export default function App() {
   const [notes, setNotes] = useState('핵심 메시지는 유지하고, 목차는 더 명확하게 재구성해 주세요.')
   const [targetTitle, setTargetTitle] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+
+  const { user, logout, loginWithPopup } = useAuth()
 
   const {
     providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured
@@ -95,6 +98,9 @@ export default function App() {
         hasConfigured={hasConfigured}
         activeProviderLabel={activeProvider?.label}
         onOpenSettings={() => setShowSettings(true)}
+        user={user}
+        onLogin={loginWithPopup}
+        onLogout={logout}
       />
 
       <ProviderSettings
