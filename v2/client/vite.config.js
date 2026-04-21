@@ -11,7 +11,8 @@ export default defineConfig({
     port: 5188,
     proxy: {
       '/api': 'http://127.0.0.1:8788',
-      '/generated': 'http://127.0.0.1:8788'
+      '/generated': 'http://127.0.0.1:8788',
+      '/auth': 'http://127.0.0.1:8788'
     },
     fs: {
       allow: ['..']

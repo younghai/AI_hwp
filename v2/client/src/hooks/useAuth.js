@@ -34,6 +34,10 @@ export function useAuth() {
       'google-oauth',
       'width=600,height=700,left=200,top=100'
     )
+    if (!popup || popup.closed || typeof popup.closed === 'undefined') {
+      window.location.href = '/auth/google'
+      return
+    }
     let handled = false
     const handler = (event) => {
       if (event.origin !== window.location.origin) return
