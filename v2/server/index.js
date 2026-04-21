@@ -25,8 +25,8 @@ app.use(healthRouter)
 app.use(providersRouter)
 app.use(draftRouter)
 app.use(exportRouter)
-app.use(createAuthRouter({ oauthBase: OAUTH_BASE, clientOrigin: CLIENT_ORIGIN }))
 app.use(googleAuthRouter)
+app.use(createAuthRouter({ oauthBase: OAUTH_BASE, clientOrigin: CLIENT_ORIGIN }))
 
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`v2 server listening on http://127.0.0.1:${PORT}`)
