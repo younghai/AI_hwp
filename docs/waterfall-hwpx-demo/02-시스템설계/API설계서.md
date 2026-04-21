@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 |------|------|
 | **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.1 |
+| **문서 버전** | v1.2 |
 | **작성일** | 2026-04-20 |
-| **최종 수정일** | 2026-04-20 |
+| **최종 수정일** | 2026-04-21 |
 | **작성자** | 개발팀 |
 | **문서 상태** | 승인됨 |
 
@@ -122,7 +122,7 @@
 ```json
 {
   "ok": true,
-  "reply": "Hello, this is a test response from Claude."
+  "message": "Hello, this is a test response from Claude."
 }
 ```
 
