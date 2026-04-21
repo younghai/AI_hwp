@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { TopBar } from './components/TopBar.jsx'
+import { LoginOverlay } from './components/LoginOverlay.jsx'
 import { ProviderSettings } from './components/ProviderSettings.jsx'
 import { ControlPanel } from './components/ControlPanel.jsx'
 import { PreviewPanel } from './components/PreviewPanel.jsx'
@@ -21,6 +22,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
 
   const { user, logout, loginWithPopup } = useAuth()
+  const autoLogin = import.meta.env.VITE_AUTO_LOGIN === 'true'
 
   const {
     providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured
@@ -94,6 +96,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {autoLogin && <LoginOverlay onLogin={loginWithPopup} user={user} />}
       <TopBar
         hasConfigured={hasConfigured}
         activeProviderLabel={activeProvider?.label}

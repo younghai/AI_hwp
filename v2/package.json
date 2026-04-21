@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace client\"",
+    "dev:auto": "concurrently \"PORT=8789 CLIENT_ORIGIN=http://127.0.0.1:5189 OAUTH_REDIRECT_BASE=http://127.0.0.1:8789 npm run dev --workspace server\" \"VITE_SERVER_PORT=8789 VITE_AUTO_LOGIN=true npm run dev --workspace client -- --port 5189\"",
     "dev:client": "npm run dev --workspace client",
     "dev:server": "npm run dev --workspace server",
     "build": "npm run build --workspace client"
