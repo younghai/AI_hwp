@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |------|------|
 | **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.2 |
+| **문서 버전** | v1.3 |
 | **작성일** | 2026-04-20 |
 
 ---
@@ -73,6 +73,22 @@
 | NFR-A11Y-001 | 키보드 전체 흐름 완료 | UC-01~03 | 화면설계서 | 전체 | TC-A11Y-004 | ✅ 구현 |
 | NFR-A11Y-002 | 색상 이외 정보 구분 | UC-01~03 | 화면설계서 | 전체 | TC-A11Y-005 | ✅ 구현 |
 | NFR-A11Y-003 | 초점 표시 | UC-01~03 | 화면설계서 | `styles.css` | TC-A11Y-006 | ✅ 구현 |
+| **FR-AUTH-001** | Google OAuth 로그인/로그아웃 | UC-07 (신설) | API설계서 | `useAuth.js`, `routes/googleAuth.js`, `LoginOverlay.jsx`, `TopBar.jsx` | TC-AUTH-001 | ✅ 구현 |
+| **FR-AUTH-002** | 세션 쿠키 지속 + `/auth/session` 폴링 | UC-07 | API설계서 | `useAuth.js`, `cookieParser`, `index.js` | TC-AUTH-002 | ✅ 구현 |
+| **FR-AUTH-003** | `VITE_AUTO_LOGIN=true` 시 전체화면 LoginOverlay | UC-07 | 화면설계서 | `App.jsx`, `LoginOverlay.jsx` | TC-AUTH-003 | ✅ 구현 |
+| **FR-PRV-001** | 미리보기 HWPX ↔ 다운로드 바이트 동일성 | UC-03, UC-05 | ADR-0002 | `App.jsx` handleGenerate 체인, `useRhwp.renderBuiltHwpx`, `useDraft.buildHwpx` | TC-PRV-001 | ✅ 구현 |
+| **FR-AI-MAP-001** | AI N섹션 ↔ HWPX N섹션 1:1 매핑 (pad/중복/placeholder 금지) | UC-02, UC-03 | ADR-0003 | `build_hwpx.py` `normalize_toc`, `apply_smart_replacements` | TC-EXPORT-010 | ✅ 구현 |
+| **FR-PROVIDER-005** | AI Provider localStorage 영속화 + 리로드 시 configured 자동 전환 | UC-04 | 상세설계서 | `hooks/useProviders.js` | TC-PROVIDER-006 | ✅ 구현 |
+| **NFR-SEC-006** | `.env` 저장 read-merge-write (사용자 추가 키 보존) | - | 상세설계서 | `server/lib/env.js` | TC-SEC-005 | ✅ 구현 |
+| **NFR-SEC-007** | OAuth state Map TTL 10분 + 60s sweep | - | 상세설계서 | `server/lib/oauth.js` | TC-SEC-006 | ✅ 구현 |
+| **NFR-SEC-008** | SVG 텍스트 XML escape 필수 | - | 상세설계서 | `shared/escape.js`, `client/src/lib/diagrams.js` | TC-SEC-007 | ✅ 구현 |
+| **NFR-SEC-009** | 업로드 파일명 UTF-8 복원 (한글 mojibake 방지) | - | 상세설계서 | `server/lib/upload.js` `decodeOriginalName` | TC-SEC-008 | ✅ 구현 |
+| **NFR-SEC-010** | AI 응답 스키마 검증 + 1회 재시도 | UC-02 | 상세설계서 | `shared/validate.js`, `services/draft.js` | TC-DRAFT-010 | ✅ 구현 |
+| **NFR-REL-005** | HWPX 단락 정규화(`_normalize_paragraph`) 로 글자 겹침 방지 | UC-03 | 상세설계서 | `scripts/build_hwpx.py` | TC-EXPORT-011 | ✅ 구현 |
+| **NFR-REL-006** | `@rhwp/core@0.7.2` exact pin (업그레이드는 ADR-0001 체크리스트) | - | ADR-0001 | `client/package.json` | TC-DEPS-001 | ✅ 구현 |
+| **NFR-OPS-001** | 완료 선언 전 `pre-completion-checklist.sh` 통과 | - | CLAUDE.md R1 | `v2/hooks/pre-completion-checklist.sh` | TC-OPS-001 | ✅ 구현 |
+| **NFR-OPS-002** | 의존성 변경 후 cache clear + 재시작 | - | CLAUDE.md R3 | `v2/hooks/post-deps-change.sh`, `skills/dev-server-restart.md` | TC-OPS-002 | ✅ 구현 |
+| **NFR-OPS-003** | HWPX 바이트 내 마커 존재 검증 도구 | - | 테스트계획서 | `v2/tools/verify-hwpx-markers.py`, `smoke-test.sh` | TC-OPS-003 | ✅ 구현 |
 
 ---
 

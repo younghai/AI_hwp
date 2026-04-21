@@ -3,9 +3,9 @@
 | 항목 | 내용 |
 |------|------|
 | **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.2 |
+| **문서 버전** | v1.3 |
 | **작성일** | 2026-04-20 |
-| **최종 수정일** | 2026-04-21 |
+| **최종 수정일** | 2026-04-22 |
 | **작성자** | 개발팀 |
 | **승인자** | 프로젝트 책임자 |
 | **문서 상태** | 승인됨 |
@@ -123,9 +123,12 @@ flowchart TB
         CP[ControlPanel.jsx]
         PP[PreviewPanel.jsx]
         PS[ProviderSettings.jsx]
+        LO[LoginOverlay.jsx]
+        TB[TopBar.jsx]
         H1[useRhwp.js]
         H2[useDraft.js]
         H3[useProviders.js]
+        H4[useAuth.js]
         LB[lib/helpers.js]
         LD[lib/diagrams.js]
         RHWP[@rhwp/core WASM]
@@ -137,11 +140,13 @@ flowchart TB
         R3[routes/draft.js]
         R4[routes/export.js]
         R5[routes/auth.js]
+        RG[routes/googleAuth.js]
         S1[services/ai.js]
         S2[services/draft.js]
         S3[services/hwpxBuilder.js]
         L1[lib/providers-config.js]
         L2[lib/oauth.js]
+        L3[lib/session.js]
     end
     subgraph Python
         BP[build_hwpx.py]
@@ -168,14 +173,28 @@ flowchart TB
     H2 -->|POST /api/generate-draft| R3
     H2 -->|POST /api/export-hwpx| R4
     H3 -->|GET/POST /api/providers| R2
-    EXP --> R1 & R2 & R3 & R4 & R5
+    H4 -->|GET /api/me| RG
+    H4 -->|POST /api/logout| RG
+    EXP --> R1 & R2 & R3 & R4 & R5 & RG
     R3 --> S2 --> S1
     R4 --> S3
+    RG --> L3
     S1 -->|SDK/HTTP| AI1
     S3 -->|spawn| BP
     BP --> DT & HU
     S2 -.->|import| SH1 & SH2
     S3 -.->|import| SH2
+
+---
+
+## 5. 변경 이력
+
+| 버전 | 날짜 | 작성자 | 변경 내용 |
+|------|------|--------|-----------|
+| v1.0 | 2026-04-20 | 개발팀 | 초안 작성 |
+| v1.1 | 2026-04-21 | 개발팀 | Google OAuth 아키텍처 반영 (`googleAuth.js`, `session.js`, `useAuth.js`, `LoginOverlay.jsx`) |
+| v1.2 | 2026-04-21 | 개발팀 | `cookie-parser` 추가, CORS credentials 설정 |
+| v1.3 | 2026-04-22 | 개발팀 | Mock 로그인 폭백, 버전 A/B dual-port 아키텍처 반영 |
 ```
 
 ---
@@ -197,6 +216,7 @@ flowchart TB
 | Node.js | ESM | 런타임 | JavaScript/TypeScript 생태계, 비동기 I/O, Python spawn 용이 |
 | Express | ^4.21.2 | 웹 프레임워크 | 경량, 미들웨어 확장성, CORS/정적 파일 지원 |
 | Multer | ^2.0.2 | 파일 업로드 | 메모리 기반 처리(in-memory), 임시 파일 생성 최소화 |
+| cookie-parser | ^1.4.7 | 쿠키 파싱 | `httpOnly` 세션 쿠키 파싱 및 검증 |
 | dotenv | ^17.4.2 | 환경변수 관리 | `.env` 기반 API 키 관리, 런타임 주입 |
 
 ### 3.3 AI SDK
