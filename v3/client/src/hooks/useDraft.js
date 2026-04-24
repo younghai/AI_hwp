@@ -49,7 +49,7 @@ export function useDraft({ setParseStatus }) {
     }
   }
 
-  async function buildHwpx({ draftOverride, sourceFile, sourceInsight }) {
+  async function buildHwpx({ draftOverride, sourceFile, sourceInsight, docType }) {
     const activeDraft = draftOverride || draft
     if (!activeDraft || !sourceFile) {
       setParseStatus('먼저 문서를 업로드하고 초안을 생성해 주세요.')
@@ -66,6 +66,7 @@ export function useDraft({ setParseStatus }) {
       formData.append('sourceFile', sourceFile)
       formData.append('sourceMode', sourceInsight.mode)
       formData.append('sourceText', sourceInsight.extractedText)
+      if (docType) formData.append('docType', docType)
 
       const response = await fetch('/api/export-hwpx', { method: 'POST', body: formData })
       const payload = await response.json()

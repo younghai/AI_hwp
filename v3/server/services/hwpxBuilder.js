@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url'
 import { createHttpError } from '../lib/errors.js'
 import { runProcess, slugify, sanitizeName } from '../lib/utils.js'
 import { decodeOriginalName, assertValidUpload } from '../lib/upload.js'
+import { validateHwpx } from './validator.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -17,7 +18,7 @@ await fs.mkdir(generatedDir, { recursive: true })
 
 export const generatedDirectory = generatedDir
 
-export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSections, rawDiagrams }) {
+export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSections, rawDiagrams, docType }) {
   if (!title) throw createHttpError('제목이 비어 있습니다.', 422)
 
   if (sourceFile) {
@@ -82,11 +83,16 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
     throw createHttpError(result.stderr || 'HWPX 생성에 실패했습니다.', 500)
   }
 
+  // v3 P0 + Phase 4: 생성된 HWPX 에 대해 native + polaris 검증 실행.
+  // docType 이 지정되면 v3/specs/<docType>.json 으로 polaris 규칙 적용.
+  const validation = await validateHwpx(outputPath, { docType })
+
   return {
     fileName: outputName,
     downloadUrl: `/generated/${outputName}`,
     message: templatePath
       ? '업로드한 HWPX 양식을 기준으로 새 문서를 생성했습니다.'
-      : '업로드한 문서 내용을 바탕으로 기본 HWPX 양식의 새 문서를 생성했습니다.'
+      : '업로드한 문서 내용을 바탕으로 기본 HWPX 양식의 새 문서를 생성했습니다.',
+    validation
   }
 }

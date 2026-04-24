@@ -14,7 +14,8 @@ router.post('/api/export-hwpx', upload.single('sourceFile'), async (req, res) =>
       sourceMode: String(req.body?.sourceMode || '').trim(),
       sourceFile: req.file || null,
       rawSections: req.body?.sections || '',
-      rawDiagrams: req.body?.diagrams || '[]'
+      rawDiagrams: req.body?.diagrams || '[]',
+      docType: String(req.body?.docType || '').trim() || undefined
     })
     res.json({ ok: true, ...result })
   } catch (error) {

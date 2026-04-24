@@ -19,3 +19,6 @@ document.hwpx
 
 # Dependencies
 node_modules/
+
+# polaris_dvc external clone (built via v3/scripts/setup-polaris-dvc.sh)
+polaris_dvc/

@@ -77,7 +77,7 @@ export default function App() {
     if (next.title) setTargetTitle(next.title)
 
     setParseStatus('AI 초안을 바탕으로 HWPX 파일을 생성하는 중입니다...')
-    const built = await buildHwpx({ draftOverride: next, sourceFile, sourceInsight })
+    const built = await buildHwpx({ draftOverride: next, sourceFile, sourceInsight, docType })
     if (built?.url) {
       setParseStatus('HWPX를 렌더링해 미리보기에 반영합니다...')
       const rendered = await renderBuiltHwpx(built.url, built.fileName)

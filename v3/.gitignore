@@ -27,3 +27,6 @@ server/.env
 .idea/
 .vscode/
 *.swp
+
+# polaris-dvc 빌드 바이너리 (1.3MB, setup-polaris-dvc.sh 로 재생성)
+tools/bin/
