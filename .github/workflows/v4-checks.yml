@@ -1,0 +1,100 @@
+name: v4 Quality Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'v4/**'
+      - '.github/workflows/v4-checks.yml'
+  pull_request:
+    paths:
+      - 'v4/**'
+
+jobs:
+  v4-build-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: v4/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install workspace
+        run: |
+          cd v4
+          npm install
+
+      - name: Python syntax check (build_hwpx, validators)
+        run: |
+          cd v4
+          python3 -m py_compile scripts/build_hwpx.py
+          python3 -m py_compile scripts/fix_namespaces.py
+          python3 -m py_compile scripts/clone_form.py
+          python3 -m py_compile scripts/validators/container.py
+          python3 -m py_compile scripts/validators/structure.py
+          python3 -m py_compile scripts/validators/validate.py
+
+      - name: Server module syntax check
+        run: |
+          cd v4/server
+          for f in index.js lib/*.js services/*.js routes/*.js; do
+            node --check "$f"
+          done
+
+      - name: Shared module syntax check
+        run: |
+          cd v4
+          for f in shared/*.js; do
+            node --check "$f"
+          done
+
+      - name: Client production build
+        run: |
+          cd v4/client
+          npm run build
+
+      - name: Start dev server (background)
+        run: |
+          cd v4
+          npm run dev > /tmp/v4-dev.log 2>&1 &
+          # wait for server up to 30s
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8792/api/health > /dev/null 2>&1; then
+              echo "v4 server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8792/api/health || (cat /tmp/v4-dev.log; exit 1)
+
+      - name: Run smoke test
+        run: bash v4/tools/smoke-test.sh
+
+      - name: Run golden tests
+        run: bash v4/testdata/run-golden.sh
+
+      - name: Validate sample HWPX
+        run: |
+          # 가장 최근 생성 파일 찾아 validator CLI 로 검증
+          LATEST=$(ls -t v4/generated/*.hwpx 2>/dev/null | head -1)
+          if [ -n "$LATEST" ]; then
+            python3 v4/scripts/validators/validate.py "$LATEST" --format=text
+          else
+            echo "No HWPX produced — skipping standalone validator check"
+          fi
+
+      - name: Upload dev log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v4-dev-log
+          path: /tmp/v4-dev.log
