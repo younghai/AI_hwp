@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { buildOptimisticDraft, triggerDownload } from '../lib/helpers.js'
 
 export function useDraft({ setParseStatus }) {
   const [draft, setDraft] = useState(null)
   const [draftLoading, setDraftLoading] = useState(false)
   const [exportState, setExportState] = useState({ loading: false, url: '', fileName: '', message: '' })
+  const draftControllerRef = useRef(null)
+  const exportControllerRef = useRef(null)
 
   function resetExport() {
     setExportState({ loading: false, url: '', fileName: '', message: '' })
@@ -15,6 +17,11 @@ export function useDraft({ setParseStatus }) {
       setParseStatus('먼저 HWP 또는 HWPX 문서를 업로드해 주세요.')
       return null
     }
+
+    // Abort any previous draft request
+    draftControllerRef.current?.abort()
+    const controller = new AbortController()
+    draftControllerRef.current = controller
 
     setDraftLoading(true)
     resetExport()
@@ -30,8 +37,9 @@ export function useDraft({ setParseStatus }) {
         body: JSON.stringify({
           fileName: sourceInsight.fileName,
           sourceText: sourceInsight.extractedText,
-          docType, companyName, goal, notes, targetTitle, aiProvider, aiApiKey
-        })
+          docType, companyName, goal, notes, targetTitle, aiProvider
+        }),
+        signal: controller.signal
       })
       const payload = await response.json()
       if (!response.ok || !payload.ok) {
@@ -41,11 +49,15 @@ export function useDraft({ setParseStatus }) {
       setParseStatus('업로드 문서를 바탕으로 새 문서 초안이 생성되었고, 오른쪽 미리보기에 바로 반영되었습니다.')
       return payload.draft
     } catch (error) {
+      if (error.name === 'AbortError') return null
       setDraft(null)
       setParseStatus(`AI 초안 생성 실패: ${error.message}`)
       return null
     } finally {
-      setDraftLoading(false)
+      if (draftControllerRef.current === controller) {
+        draftControllerRef.current = null
+        setDraftLoading(false)
+      }
     }
   }
 
@@ -55,6 +67,12 @@ export function useDraft({ setParseStatus }) {
       setParseStatus('먼저 문서를 업로드하고 초안을 생성해 주세요.')
       return null
     }
+
+    // Abort any previous export request
+    exportControllerRef.current?.abort()
+    const controller = new AbortController()
+    exportControllerRef.current = controller
+
     setExportState({ loading: true, url: '', fileName: '', message: '' })
 
     try {
@@ -68,7 +86,7 @@ export function useDraft({ setParseStatus }) {
       formData.append('sourceText', sourceInsight.extractedText)
       if (docType) formData.append('docType', docType)
 
-      const response = await fetch('/api/export-hwpx', { method: 'POST', body: formData })
+      const response = await fetch('/api/export-hwpx', { method: 'POST', body: formData, signal: controller.signal })
       const payload = await response.json()
       if (!response.ok || !payload.ok) {
         throw new Error(payload.error || 'HWPX 생성에 실패했습니다.')
@@ -83,6 +101,7 @@ export function useDraft({ setParseStatus }) {
       setParseStatus(payload.message)
       return result
     } catch (error) {
+      if (error.name === 'AbortError') return null
       resetExport()
       setParseStatus(error.message)
       return null

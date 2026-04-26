@@ -62,6 +62,11 @@ jobs:
           cd v4/client
           npm run build
 
+      - name: Run unit tests
+        run: |
+          cd v4/client
+          npm test
+
       - name: Start dev server (background)
         run: |
           cd v4

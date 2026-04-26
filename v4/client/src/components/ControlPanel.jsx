@@ -20,19 +20,7 @@ export function ControlPanel({
   return (
     <section className="control-column">
       <div className="panel">
-        <p className="section-label">1. 원본 문서 업로드</p>
-        <Uploader
-          onFileSelect={onFileSelect}
-          currentFile={sourceFile}
-          currentInsight={sourceInsight}
-        />
-        <p className="helper">
-          HWP는 내용을 분석해 새 HWPX 초안을 만들고, HWPX는 업로드한 양식을 결과 문서 템플릿으로 재사용합니다.
-        </p>
-      </div>
-
-      <div className="panel">
-        <p className="section-label">2. 생성 조건</p>
+        <p className="section-label">1. 생성 조건</p>
         <label>
           <span>문서 유형</span>
           <select value={docType} onChange={(e) => setDocType(e.target.value)}>
@@ -104,6 +92,18 @@ export function ControlPanel({
           </a>
         )}
         <p className="status-message">{parseStatus}</p>
+      </div>
+
+      <div className="panel">
+        <p className="section-label">2. 원본 문서 업로드</p>
+        <Uploader
+          onFileSelect={onFileSelect}
+          currentFile={sourceFile}
+          currentInsight={sourceInsight}
+        />
+        <p className="helper">
+          HWP는 내용을 분석해 새 HWPX 초안을 만들고, HWPX는 업로드한 양식을 결과 문서 템플릿으로 재사용합니다.
+        </p>
       </div>
     </section>
   )

@@ -1,10 +1,101 @@
-# Lessons Learned — v2
+# Lessons Learned — v4
 
 실제로 터진 문제만 기록. 추측, "~할 것 같다"는 금지. 각 항목은:
 - **What happened** (현상)
 - **Why** (근본 원인)
 - **Fix** (실제 적용한 해결책)
 - **Prevention** (다음 번 재발 방지 장치 — `skills/`, `hooks/`, `CLAUDE.md` 업데이트 경로)
+
+---
+
+## 2026-04-26 — v4 문서에 v2/v3 버전 식별자 잔여
+
+### What happened
+- `v4/README.md` L1: `# v3 — AI Document Studio`
+- `v4/CLAUDE.md` L1: `# v2 — AI Document Studio`
+- 서비스기획서, SRS, lessons-learned 모두 v2/v3으로 표기
+
+### Why
+- v3에서 v4로 복사하면서 버전 식별자를 일괄 변경하지 않음
+
+### Fix
+- README.md, CLAUDE.md, 서비스기획서, SRS, lessons-learned의 모든 버전 식별자를 v4로 수정
+- 포트 번호, 폴더 구조, 컴포넌트 목록을 v4 실제 코드에 맞게 업데이트
+
+### Prevention
+- 버전 업그레이드 시 `grep -rn "v2\|v3" v4/` 로 잔여 식별자 스캔 필수
+- `hooks/pre-completion-checklist.sh`에 버전 식별자 일관성 체크 추가 고려
+
+---
+
+## 2026-04-26 — @rhwp/core ^0.7.2 사용으로 ADR-0001 위반
+
+### What happened
+- `v4/client/package.json`에서 `"@rhwp/core": "^0.7.2"` 사용
+- ADR-0001은 exact pin만 허용, caret 금지
+
+### Why
+- v4 개발 시 ADR-0001 규칙을 인지하지 못한 상태에서 semver 범위 지정
+
+### Fix
+- `"@rhwp/core": "0.7.2"` (exact pin)으로 변경
+
+### Prevention
+- `hooks/post-deps-change.sh`에 `grep '"\^"' client/package.json` 체크 추가 고려
+
+---
+
+## 2026-04-26 — postinstall || true 로 설치 에러 음소거
+
+### What happened
+- `v4/package.json` postinstall에 `|| true` 추가
+- setup-rhwp-symlink.sh 실패해도 npm install이 성공으로 표시됨
+
+### Why
+- 개발 중 빠른 설치를 위해 에러를 숨김
+
+### Fix
+- `|| true` 제거. 실패 시 명확하게 에러 노출
+
+### Prevention
+- postinstall 스크립트는 에러를 숨기지 않는다. 필요시 스크립트 내에서 graceful 처리
+
+---
+
+## 2026-04-26 — useDraft fetch 경쟁 조건 (race condition)
+
+### What happened
+- AI 초안 생성 버튼 연속 클릭 시 이전 응답이 최신 응답을 덮어씀
+- AbortController 없이 fetch 호출
+
+### Why
+- useDraft hook에서 각 fetch에 signal 전달하지 않음
+
+### Fix
+- `useRef`로 AbortController 저장
+- 각 fetch 호출 전 이전 요청 abort
+- AbortError는 사용자에게 표시하지 않음
+
+### Prevention
+- 모든 async hook에서 AbortController 패턴 필수 적용
+
+---
+
+## 2026-04-26 — LoginOverlay 접근성 위반 (WCAG 2.4.3)
+
+### What happened
+- 로그인 오버레이 오픈 시 Tab 키가 오버레이 뒤 요소로 이동
+- Escape 키로 닫기 불가
+- role="dialog" 및 aria-modal 없음
+
+### Fix
+- focus trap: Tab/Shift+Tab을 오버레이 내부로 제한
+- Escape 키 핸들링
+- `role="dialog" aria-modal="true"` 추가
+- 닫힐 때 이전 포커스 요소로 복귀
+
+### Prevention
+- 모달/오버레이 컴포넌트에는 항상 포커스 트랩 + Escape + role=dialog 적용
 
 ---
 

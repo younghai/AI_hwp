@@ -1,6 +1,6 @@
-# v2 — AI Document Studio (HWP/HWPX Automation)
+# v4 — AI Document Studio (HWP/HWPX Automation)
 
-**Read this file every time before working on v2. It encodes every mistake we've already made so you don't repeat them.**
+**Read this file every time before working on v4. It encodes every mistake we've already made so you don't repeat them.**
 
 ---
 
@@ -62,21 +62,23 @@
 ## 🏗 아키텍처 (ADRs: `docs/adr/`)
 
 ```
-v3/
+v4/
 ├── shared/              # client + server 공용 유틸 (escape, validate, docTypes)
 ├── server/
-│   ├── lib/             # 순수 유틸 (errors, env, oauth, upload, providers-config)
+│   ├── lib/             # 순수 유틸 (errors, env, oauth, upload, providers-config, session)
 │   ├── services/        # 비즈니스 로직 (ai, draft, hwpxBuilder)
-│   ├── routes/          # Express 라우터 (health, providers, draft, export, auth)
+│   ├── routes/          # Express 라우터 (health, providers, draft, export, auth, samples)
 │   └── index.js         # 부트스트랩 (라우터 장착만, ~30줄)
 ├── client/
 │   ├── src/
 │   │   ├── App.jsx      # 조합만 (~130줄). 로직 금지
 │   │   ├── lib/         # 순수 함수 (diagrams, helpers)
-│   │   ├── hooks/       # 상태 (useRhwp, useDraft, useProviders)
-│   │   └── components/  # 프레젠테이션 (TopBar, ProviderSettings, ControlPanel, PreviewPanel)
+│   │   ├── hooks/       # 상태 (useRhwp, useDraft, useProviders, useToast)
+│   │   └── components/  # 프레젠테이션 (TopBar, ProviderSettings, ControlPanel,
+│   │                       PreviewPanel, EmptyState, Toast, ValidationPanel)
 │   └── vite.config.js   # fs.allow=['..'] (workspace 부모 공유 접근)
-└── scripts/build_hwpx.py  # Python 워커. Node가 spawn 으로 호출
+├── scripts/build_hwpx.py  # Python 워커. Node가 spawn 으로 호출 (v4 자체 보유)
+└── templates/              # HWPX 템플릿 + 샘플 문서 (v4 자체 보유)
 ```
 
 **금기**:

@@ -117,5 +117,5 @@ bash v4/tools/smoke-test.sh         # 정상성 재검증
 
 ## 🔗 참고
 
-- 문서 파싱/렌더링: [`rhwp`](https://github.com/edwardkim/rhwp) (0.7.2 pinned)
-- HWPX 빌더: 상위 폴더의 [`scripts/build_hwpx.py`](../scripts/build_hwpx.py)
+- 문서 파싱/렌더링: [`rhwp`](https://github.com/edwardkim/rhwp) (`^0.7.2`)
+- HWPX 빌더: [`scripts/build_hwpx.py`](./scripts/build_hwpx.py) (v4 자체 보유)

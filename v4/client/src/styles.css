@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --bg: #f6f1e7;
   --panel: rgba(255, 255, 255, 0.78);
   --line: rgba(15, 24, 35, 0.08);
@@ -14,6 +14,28 @@
   --radius-lg: 34px;
   --radius-pill: 999px;
   --shadow: 0 30px 70px rgba(17, 17, 17, 0.08);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1a1a;
+    --panel: rgba(40, 40, 40, 0.85);
+    --line: rgba(255, 255, 255, 0.1);
+    --text: #e8e8e8;
+    --muted: #9a9a9a;
+    --accent: #ffc107;
+    --accent-strong: #ffb300;
+    --accent-soft: #3d3418;
+    --ink: #f0f0f0;
+    --shadow: 0 30px 70px rgba(0, 0, 0, 0.3);
+  }
+
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(255, 193, 7, 0.12), transparent 24%),
+      radial-gradient(circle at top right, rgba(255, 255, 255, 0.03), transparent 18%),
+      linear-gradient(180deg, #1a1a1a 0%, #111111 100%);
+  }
 }
 
 * {

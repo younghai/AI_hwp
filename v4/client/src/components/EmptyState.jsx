@@ -5,10 +5,12 @@ export function EmptyState({ onTrySample }) {
   const [loadingId, setLoadingId] = useState(null)
 
   useEffect(() => {
+    let cancelled = false
     fetch('/api/samples')
       .then((r) => r.json())
-      .then((d) => { if (d.ok) setSamples(d.samples) })
+      .then((d) => { if (!cancelled && d.ok) setSamples(d.samples) })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [])
 
   async function handleTry(sample) {

@@ -20,6 +20,11 @@ export default defineConfig({
     fs: {
       allow: ['..']
     }
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js']
   }
 })
 

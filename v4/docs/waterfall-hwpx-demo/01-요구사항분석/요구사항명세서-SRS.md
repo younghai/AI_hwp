@@ -1,6 +1,6 @@
 # 요구사항 명세서 (SRS - Software Requirements Specification)
 
-> 본 문서는 HWP/HWPX AI 문서 생성 데모 서비스(v2)의 기능적 및 비기능적 요구사항을 정의한다.
+> 본 문서는 HWP/HWPX AI 문서 생성 데모 서비스(v4)의 기능적 및 비기능적 요구사항을 정의한다.
 
 | 항목 | 내용 |
 |------|------|

@@ -89,7 +89,7 @@ export default function App() {
     }
     const next = await generateDraft({
       sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle,
-      aiProvider, aiApiKey, onOptimistic: scrollToPreview
+      aiProvider, onOptimistic: scrollToPreview
     })
     if (!next) {
       scrollToPreview()
@@ -196,5 +196,6 @@ export default function App() {
 
       <ToastContainer toasts={toasts} onDismiss={dismiss} />
     </div>
+    </ErrorBoundary>
   )
 }

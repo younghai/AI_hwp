@@ -1,8 +1,52 @@
+import { useEffect, useRef } from 'react'
+
 export function LoginOverlay({ onLogin, user }) {
+  const overlayRef = useRef(null)
+  const triggerRef = useRef(null)
+
+  useEffect(() => {
+    const overlay = overlayRef.current
+    if (!overlay) return
+
+    triggerRef.current = document.activeElement
+    const firstBtn = overlay.querySelector('button')
+    firstBtn?.focus()
+
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        onLogin()
+        return
+      }
+      if (e.key !== 'Tab') return
+
+      const focusable = overlay.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+
+    overlay.addEventListener('keydown', handleKeyDown)
+    return () => {
+      overlay.removeEventListener('keydown', handleKeyDown)
+      triggerRef.current?.focus()
+    }
+  }, [onLogin])
+
   if (user) return null
 
   return (
-    <div className="login-overlay">
+    <div className="login-overlay" ref={overlayRef} role="dialog" aria-modal="true" aria-label="로그인">
       <div className="login-card">
         <p className="eyebrow">AI Document Studio</p>
         <h1>HWP / HWPX 문서 자동화</h1>
