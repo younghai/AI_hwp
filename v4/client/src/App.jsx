@@ -138,8 +138,9 @@ export default function App() {
   const showEmptyState = !sourceFile && !draft && !builtPreview.svgs.length
 
   return (
-    <div className="app-shell">
-      {autoLogin && <LoginOverlay onLogin={loginWithPopup} user={user} />}
+    <ErrorBoundary>
+      <div className="app-shell">
+        {autoLogin && <LoginOverlay onLogin={loginWithPopup} user={user} />}
       <TopBar
         hasConfigured={hasConfigured}
         activeProviderLabel={activeProvider?.label}

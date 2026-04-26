@@ -1,4 +1,5 @@
 import fs from 'fs/promises'
+import { existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { createHttpError } from '../lib/errors.js'
@@ -8,11 +9,13 @@ import { validateHwpx } from './validator.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-// v3 is self-contained: scripts/, templates/, generated/ all under v3Root
-const v3Root = path.resolve(__dirname, '..', '..')
-const scriptsDir = path.join(v3Root, 'scripts')
+const v4Root = path.resolve(__dirname, '..', '..')
+const scriptsDir = path.join(v4Root, 'scripts')
 const buildScript = path.join(scriptsDir, 'build_hwpx.py')
-const generatedDir = path.join(v3Root, 'generated')
+const generatedDir = path.join(v4Root, 'generated')
+
+const venvPython = path.join(v4Root, '.venv', 'bin', 'python3')
+const pythonCmd = existsSync(venvPython) ? venvPython : 'python3'
 
 await fs.mkdir(generatedDir, { recursive: true })
 
@@ -73,7 +76,7 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
 
   let result
   try {
-    result = await runProcess('python3', args, v3Root)
+    result = await runProcess(pythonCmd, args, v4Root)
   } finally {
     if (templatePath) fs.unlink(templatePath).catch(() => {})
     if (sectionsJsonPath) fs.unlink(sectionsJsonPath).catch(() => {})
@@ -83,8 +86,8 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
     throw createHttpError(result.stderr || 'HWPX 생성에 실패했습니다.', 500)
   }
 
-  // v3 P0 + Phase 4: 생성된 HWPX 에 대해 native + polaris 검증 실행.
-  // docType 이 지정되면 v3/specs/<docType>.json 으로 polaris 규칙 적용.
+  // v4: 생성된 HWPX 에 대해 native + polaris 검증 실행.
+  // docType 이 지정되면 v4/specs/<docType>.json 으로 polaris 규칙 적용.
   const validation = await validateHwpx(outputPath, { docType })
 
   return {

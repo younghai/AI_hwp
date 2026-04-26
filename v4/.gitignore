@@ -20,6 +20,9 @@ server/.env
 .env.local
 .env.*.local
 
+# Python virtual environment
+.venv/
+
 # OS noise
 .DS_Store
 

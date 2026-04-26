@@ -315,19 +315,16 @@ def comparison(rows: list[dict], title: str = "") -> str:
 
 
 def render_diagram(spec: dict) -> str | None:
-    """
-    Render a diagram from an AI-generated spec dict.
-    spec: {"type": "flowchart|timeline|comparison", "title": "...", "data": [...]}
-    Returns SVG string or None if type is unknown.
-    """
     dtype = spec.get("type", "")
     title = spec.get("title", "")
-    data  = spec.get("data", [])
 
     if dtype == "flowchart":
-        return flowchart(steps=data, title=title)
+        steps = spec.get("steps", spec.get("data", []))
+        return flowchart(steps=steps, title=title)
     elif dtype == "timeline":
-        return timeline(items=data, title=title)
+        items = spec.get("items", spec.get("data", []))
+        return timeline(items=items, title=title)
     elif dtype == "comparison":
-        return comparison(rows=data, title=title)
+        rows = spec.get("rows", spec.get("data", []))
+        return comparison(rows=rows, title=title)
     return None
