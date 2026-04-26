@@ -2,10 +2,10 @@
 
 | 항목 | 내용 |
 |------|------|
-| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.1 |
-| **작성일** | 2026-04-20 |
-| **최종 수정일** | 2026-04-20 |
+| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v3) |
+| **문서 버전** | v1.3 |
+| **작성일** | 2026-04-22 |
+| **최종 수정일** | 2026-04-22 |
 | **작성자** | 개발팀 |
 | **문서 상태** | 승인됨 |
 
@@ -16,7 +16,7 @@
 ### 1.1 API 스타일
 
 - **RESTful HTTP API**
-- **Base URL**: `http://127.0.0.1:8788`
+- **Base URL**: `http://127.0.0.1:8790`
 - **Content-Type**: `application/json` (파일 업로드 제외)
 - **CORS**: `CLIENT_ORIGIN`에서만 허용
 
@@ -122,7 +122,7 @@
 ```json
 {
   "ok": true,
-  "reply": "Hello, this is a test response from Claude."
+  "message": "Hello, this is a test response from Claude."
 }
 ```
 
@@ -130,7 +130,93 @@
 
 ---
 
-### 2.3 초안 생성
+### 2.3 Google OAuth 인증
+
+#### GET /auth/google
+
+**설명**: Google OAuth 로그인 시작 (또는 Mock 로그인 폼)
+
+**동작**:
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 설정된 경우: Google OAuth 2.0 authorize URL로 리디렉션
+- 미설정 또는 placeholder인 경우: HTML Mock 로그인 폼 반환
+
+**Response** (Mock 모드):
+- `Content-Type: text/html`
+- 이메일/이름 입력 폼 + "Mock 로그인" 버튼
+
+---
+
+#### GET /auth/google/callback
+
+**설명**: Google OAuth 콜백 (code → token → userinfo 교환)
+
+**Query Parameters**:
+| 파라미터 | 설명 |
+|----------|------|
+| `code` | Google authorization code |
+| `state` | CSRF 방지용 상태 토큰 |
+
+**동작**:
+1. `code`를 `access_token`으로 교환
+2. Google userinfo API로 사용자 정보 조회
+3. 세션 생성 (`v2_session` 쿠키 설정, 24h TTL)
+4. 팝업 모드: `window.opener.postMessage({type:'google-auth-result', success:true})` 후 창 닫기
+5. 리디렉션 모드: `CLIENT_ORIGIN`으로 리디렉션
+
+**Status Codes**: 200 OK (팝업), 302 Redirect, 400 Bad Request, 500 Internal Server Error
+
+---
+
+#### GET /api/me
+
+**설명**: 현재 로그인한 사용자 정보 조회
+
+**Request**: `Cookie: v2_session=<sid>`
+
+**Response** (로그인 상태):
+```json
+{
+  "authenticated": true,
+  "user": {
+    "email": "user@example.com",
+    "name": "홍길동",
+    "picture": "https://..."
+  }
+}
+```
+
+**Response** (미로그인):
+```json
+{
+  "authenticated": false,
+  "user": null
+}
+```
+
+**Status Codes**: 200 OK
+
+---
+
+#### POST /api/logout
+
+**설명**: 로그아웃 및 세션 삭제
+
+**Request**: `Cookie: v2_session=<sid>`
+
+**Response**:
+```json
+{
+  "ok": true
+}
+```
+
+**동작**: 세션 저장소에서 `sid` 제거 + `v2_session` 쿠키 삭제
+
+**Status Codes**: 200 OK
+
+---
+
+### 2.4 초안 생성
 
 #### POST /api/generate-draft
 
@@ -267,6 +353,75 @@
 
 ---
 
+### 2.7 Google OAuth 인증 (신규)
+
+> 신규 라우터 `server/routes/googleAuth.js`. `cookie-parser` 및 CORS `credentials: true` 필요.
+
+#### GET /auth/google
+
+**설명**: Google OAuth authorize 리다이렉트 시작
+
+**Request**: 없음
+
+**Response**: 302 Redirect → `https://accounts.google.com/o/oauth2/v2/auth?...`
+
+**환경 변수**:
+- `GOOGLE_CLIENT_ID` (필수)
+- `OAUTH_REDIRECT_BASE` (선택, 기본 `http://127.0.0.1:8790`)
+
+---
+
+#### GET /auth/google/callback
+
+**설명**: Google OAuth code → 토큰 교환 → 사용자 프로필 조회 → 세션 쿠키 발급
+
+**Query**: `code`, `state`
+
+**Response**: 팝업 창에서 `window.opener.postMessage({type: 'auth-result', success, user})` 후 `window.close()`
+
+**Set-Cookie**: `session=<opaque>; HttpOnly; SameSite=Lax; Max-Age=<TTL>`
+
+**Status Codes**: 200 OK (성공/실패 모두 HTML 페이지 반환)
+
+---
+
+#### GET /auth/session
+
+**설명**: 현재 세션의 사용자 조회 (클라이언트 폴링용)
+
+**Request**: `Cookie: session=...`
+
+**Response**:
+```json
+{
+  "user": {
+    "email": "user@example.com",
+    "name": "User Name",
+    "picture": "https://..."
+  }
+}
+```
+
+또는 비로그인 시:
+```json
+{ "user": null }
+```
+
+---
+
+#### POST /auth/logout
+
+**설명**: 세션 쿠키 무효화
+
+**Response**:
+```json
+{ "ok": true }
+```
+
+**Set-Cookie**: `session=; Max-Age=0`
+
+---
+
 ## 3. 에러 코드 정의
 
 | HTTP 상태 코드 | 의미 | 발생 상황 |
@@ -281,4 +436,16 @@
 
 ## 4. API 버저닝
 
-현재 v2 데모는 버저닝 없이 단일 엔드포인트 세트로 운영된다. 향후 SaaS 전환 시 `/api/v1/` prefix를 도입할 것을 권장한다.
+현재 v3 데모는 버저닝 없이 단일 엔드포인트 세트로 운영된다. 향후 SaaS 전환 시 `/api/v1/` prefix를 도입할 것을 권장한다.
+
+
+---
+
+## 5. 변경 이력
+
+| 버전 | 날짜 | 작성자 | 변경 내용 |
+|------|------|--------|-----------|
+| v1.0 | 2026-04-20 | 개발팀 | 초안 작성 |
+| v1.1 | 2026-04-21 | 개발팀 | Google OAuth 엔드포인트 추가 (`/auth/google`, `/auth/google/callback`, `/api/me`, `/api/logout`) |
+| v1.2 | 2026-04-21 | 개발팀 | 인증 방식에 메모리 세션 + cookie-parser 반영 |
+| v1.3 | 2026-04-22 | 개발팀 | Mock 로그인 폭백, CORS credentials, dual-port 배포 반영 |

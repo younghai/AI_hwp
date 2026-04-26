@@ -2,10 +2,10 @@
 
 | 항목 | 내용 |
 |------|------|
-| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.1 |
-| **작성일** | 2026-04-20 |
-| **최종 수정일** | 2026-04-20 |
+| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v3) |
+| **문서 버전** | v1.3 |
+| **작성일** | 2026-04-22 |
+| **최종 수정일** | 2026-04-22 |
 | **작성자** | 개발팀 |
 | **승인자** | 프로젝트 책임자 |
 | **문서 상태** | 승인됨 |
@@ -16,7 +16,7 @@
 
 ### 1.1 목적
 
-본 문서는 v2 데모 서비스의 시스템 아키텍처를 정의하고, 주요 기술적 결정 사항과 설계 원칙을 기술한다. 개발팀이 시스템의 전체 구조를 이해하고 일관된 방향으로 개발을 수행할 수 있도록 한다.
+본 문서는 v3 데모 서비스의 시스템 아키텍처를 정의하고, 주요 기술적 결정 사항과 설계 원칙을 기술한다. 개발팀이 시스템의 전체 구조를 이해하고 일관된 방향으로 개발을 수행할 수 있도록 한다.
 
 ### 1.2 범위
 
@@ -34,7 +34,7 @@
 | 요구사항 정의서 (SRS) | v1.1 | 기능/비기능 요구사항 |
 | 서비스 기획서 | v1.1 | MVP 스코프 |
 | HWPX 포맷 문서 | - | 한글 문서 구조 참조 |
-| ADR | - | `v2/docs/adr/` 참조 |
+| ADR | - | `v3/docs/adr/` 참조 |
 
 ### 1.4 용어 정의
 
@@ -97,9 +97,9 @@ flowchart TB
         AI3[Kimi API]
         AI4[xAI API]
     end
-    subgraph v2 서비스
-        C[React Client<br/>localhost:5188]
-        S[Express Server<br/>localhost:8788]
+    subgraph v3 서비스
+        C[React Client<br/>localhost:5190]
+        S[Express Server<br/>localhost:8790]
         P[Python Build Engine<br/>build_hwpx.py]
     end
     U[사용자] --> C
@@ -123,9 +123,12 @@ flowchart TB
         CP[ControlPanel.jsx]
         PP[PreviewPanel.jsx]
         PS[ProviderSettings.jsx]
+        LO[LoginOverlay.jsx]
+        TB[TopBar.jsx]
         H1[useRhwp.js]
         H2[useDraft.js]
         H3[useProviders.js]
+        H4[useAuth.js]
         LB[lib/helpers.js]
         LD[lib/diagrams.js]
         RHWP[@rhwp/core WASM]
@@ -137,16 +140,20 @@ flowchart TB
         R3[routes/draft.js]
         R4[routes/export.js]
         R5[routes/auth.js]
+        RG[routes/googleAuth.js]
         S1[services/ai.js]
         S2[services/draft.js]
         S3[services/hwpxBuilder.js]
         L1[lib/providers-config.js]
         L2[lib/oauth.js]
+        L3[lib/session.js]
     end
     subgraph Python
         BP[build_hwpx.py]
         DT[diagram_templates.py]
         HU[hwpx_utils.py]
+        FN[fix_namespaces.py]
+        CF[clone_form.py]
     end
     subgraph Shared
         SH1[docTypes.js]
@@ -154,10 +161,10 @@ flowchart TB
         SH3[escape.js]
     end
     subgraph Infra
-        ADR[v2/docs/adr/]
-        SKL[v2/skills/]
-        HOK[v2/hooks/]
-        TOL[v2/tools/]
+        ADR[v3/docs/adr/]
+        SKL[v3/skills/]
+        HOK[v3/hooks/]
+        TOL[v3/tools/]
     end
 
     UI --> CP & PP & PS
@@ -168,14 +175,28 @@ flowchart TB
     H2 -->|POST /api/generate-draft| R3
     H2 -->|POST /api/export-hwpx| R4
     H3 -->|GET/POST /api/providers| R2
-    EXP --> R1 & R2 & R3 & R4 & R5
+    H4 -->|GET /api/me| RG
+    H4 -->|POST /api/logout| RG
+    EXP --> R1 & R2 & R3 & R4 & R5 & RG
     R3 --> S2 --> S1
     R4 --> S3
+    RG --> L3
     S1 -->|SDK/HTTP| AI1
     S3 -->|spawn| BP
     BP --> DT & HU
     S2 -.->|import| SH1 & SH2
     S3 -.->|import| SH2
+
+---
+
+## 5. 변경 이력
+
+| 버전 | 날짜 | 작성자 | 변경 내용 |
+|------|------|--------|-----------|
+| v1.0 | 2026-04-20 | 개발팀 | 초안 작성 |
+| v1.1 | 2026-04-21 | 개발팀 | Google OAuth 아키텍처 반영 (`googleAuth.js`, `session.js`, `useAuth.js`, `LoginOverlay.jsx`) |
+| v1.2 | 2026-04-21 | 개발팀 | `cookie-parser` 추가, CORS credentials 설정 |
+| v1.3 | 2026-04-22 | 개발팀 | Mock 로그인 폭백, 버전 A/B dual-port 아키텍처 반영 |
 ```
 
 ---
@@ -197,6 +218,7 @@ flowchart TB
 | Node.js | ESM | 런타임 | JavaScript/TypeScript 생태계, 비동기 I/O, Python spawn 용이 |
 | Express | ^4.21.2 | 웹 프레임워크 | 경량, 미들웨어 확장성, CORS/정적 파일 지원 |
 | Multer | ^2.0.2 | 파일 업로드 | 메모리 기반 처리(in-memory), 임시 파일 생성 최소화 |
+| cookie-parser | ^1.4.7 | 쿠키 파싱 | `httpOnly` 세션 쿠키 파싱 및 검증 |
 | dotenv | ^17.4.2 | 환경변수 관리 | `.env` 기반 API 키 관리, 런타임 주입 |
 
 ### 3.3 AI SDK
@@ -220,10 +242,10 @@ flowchart TB
 
 | 인프라 | 위치 | 역할 |
 |--------|------|------|
-| ADR | `v2/docs/adr/` | 아키텍처 결정 기록 (rhwp 버전 고정, preview=download byte identity, AI content integrity) |
-| Skills | `v2/skills/` | 개발 워크플로우 가이드 (dependency-upgrade, dev-server-restart, verify-preview-equals-download) |
-| Hooks | `v2/hooks/` | Git hooks / 자동화 (post-deps-change, pre-completion-checklist) |
-| Tools | `v2/tools/` | smoke-test.sh, verify-hwpx-markers.py |
+| ADR | `v3/docs/adr/` | 아키텍처 결정 기록 (rhwp 버전 고정, preview=download byte identity, AI content integrity) |
+| Skills | `v3/skills/` | 개발 워크플로우 가이드 (dependency-upgrade, dev-server-restart, verify-preview-equals-download) |
+| Hooks | `v3/hooks/` | Git hooks / 자동화 (post-deps-change, pre-completion-checklist) |
+| Tools | `v3/tools/` | smoke-test.sh, verify-hwpx-markers.py |
 
 ---
 
@@ -319,17 +341,17 @@ server/
 
 ```
 [사용자 PC]
-  ├── Client (Vite dev server) : http://127.0.0.1:5188
+  ├── Client (Vite dev server) : http://127.0.0.1:5190
   │   └── /api  ──프록시──▶ Server
   │   └── /generated ──프록시──▶ Server
-  └── Server (Express)         : http://127.0.0.1:8788
+  └── Server (Express)         : http://127.0.0.1:8790
       └── Python 3 (spawn)     : scripts/build_hwpx.py
 ```
 
 ### 5.2 실행 명령
 
 ```bash
-cd v2
+cd v3
 npm install
 npm run dev   # concurrently로 client + server 동시 실행
 ```
@@ -338,8 +360,8 @@ npm run dev   # concurrently로 client + server 동시 실행
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `PORT` | 8788 | Express 서버 포트 |
-| `CLIENT_ORIGIN` | `http://127.0.0.1:5188` | CORS 허용 Origin |
+| `PORT` | 8790 | Express 서버 포트 |
+| `CLIENT_ORIGIN` | `http://127.0.0.1:5190` | CORS 허용 Origin |
 | `ANTHROPIC_API_KEY` | - | Anthropic API 키 |
 | `OPENAI_API_KEY` | - | OpenAI API 키 |
 | `KIMI_API_KEY` | - | Kimi API 키 |

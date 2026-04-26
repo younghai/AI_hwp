@@ -2,10 +2,10 @@
 
 | 항목 | 내용 |
 |------|------|
-| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v2) |
-| **문서 버전** | v1.1 |
+| **프로젝트명** | HWP/HWPX AI 문서 생성 데모 서비스 (v4) |
+| **문서 버전** | v1.4 |
 | **작성일** | 2026-04-20 |
-| **최종 수정일** | 2026-04-20 |
+| **최종 수정일** | 2026-04-25 |
 | **작성자** | 개발팀 |
 | **승인자** | 프로젝트 책임자 |
 | **문서 상태** | 승인됨 |
@@ -98,8 +98,8 @@ flowchart TB
         AI4[xAI API]
     end
     subgraph v2 서비스
-        C[React Client<br/>localhost:5188]
-        S[Express Server<br/>localhost:8788]
+        C[React Client<br/>localhost:5192 / 5193]
+        S[Express Server<br/>localhost:8792 / 8793]
         P[Python Build Engine<br/>build_hwpx.py]
     end
     U[사용자] --> C
@@ -123,9 +123,15 @@ flowchart TB
         CP[ControlPanel.jsx]
         PP[PreviewPanel.jsx]
         PS[ProviderSettings.jsx]
+        LO[LoginOverlay.jsx]
+        TB[TopBar.jsx]
+        ES[EmptyState.jsx]
+        TO[Toast.jsx / useToast.js]
+        VP[ValidationPanel.jsx]
         H1[useRhwp.js]
         H2[useDraft.js]
         H3[useProviders.js]
+        H4[useAuth.js]
         LB[lib/helpers.js]
         LD[lib/diagrams.js]
         RHWP[@rhwp/core WASM]
@@ -136,12 +142,14 @@ flowchart TB
         R2[routes/providers.js]
         R3[routes/draft.js]
         R4[routes/export.js]
-        R5[routes/auth.js]
+        RG[routes/googleAuth.js]
+        RS[routes/samples.js]
         S1[services/ai.js]
         S2[services/draft.js]
         S3[services/hwpxBuilder.js]
         L1[lib/providers-config.js]
         L2[lib/oauth.js]
+        L3[lib/session.js]
     end
     subgraph Python
         BP[build_hwpx.py]
@@ -160,7 +168,7 @@ flowchart TB
         TOL[v2/tools/]
     end
 
-    UI --> CP & PP & PS
+    UI --> CP & PP & PS & ES & TO & VP
     CP --> UP
     UP --> LB
     UI --> H1 & H2 & H3
@@ -168,14 +176,30 @@ flowchart TB
     H2 -->|POST /api/generate-draft| R3
     H2 -->|POST /api/export-hwpx| R4
     H3 -->|GET/POST /api/providers| R2
-    EXP --> R1 & R2 & R3 & R4 & R5
+    H4 -->|GET /api/me| RG
+    H4 -->|POST /api/logout| RG
+    ES -->|GET /api/samples| RS
+    EXP --> R1 & R2 & R3 & R4 & RG & RS
     R3 --> S2 --> S1
     R4 --> S3
+    RG --> L3
     S1 -->|SDK/HTTP| AI1
     S3 -->|spawn| BP
     BP --> DT & HU
     S2 -.->|import| SH1 & SH2
     S3 -.->|import| SH2
+
+---
+
+## 5. 변경 이력
+
+| 버전 | 날짜 | 작성자 | 변경 내용 |
+|------|------|--------|-----------|
+| v1.0 | 2026-04-20 | 개발팀 | 초안 작성 |
+| v1.1 | 2026-04-21 | 개발팀 | Google OAuth 아키텍처 반영 (`googleAuth.js`, `session.js`, `useAuth.js`, `LoginOverlay.jsx`) |
+| v1.2 | 2026-04-21 | 개발팀 | `cookie-parser` 추가, CORS credentials 설정 |
+| v1.3 | 2026-04-22 | 개발팀 | Mock 로그인 폭백, 버전 A/B dual-port 아키텍처 반영 |
+| v1.4 | 2026-04-25 | 개발팀 | v4 컴포넌트(EmptyState, Toast, ValidationPanel, samples) 및 semver caret `@rhwp/core` 반영 |
 ```
 
 ---
@@ -188,7 +212,7 @@ flowchart TB
 |------|------|------|-----------|
 | React | ^18.3.1 | UI 컴포넌트 렌더링 | 선언적 UI, 풍부한 생태계, WASM 연동 용이 |
 | Vite | ^5.4.21 | 빌드 도구 및 개발 서버 | 빠른 HMR, ESM 네이티브 지원, 프록시 설정 간편 |
-| @rhwp/core | 0.7.2 | HWP/HWPX WASM 파서 | 브라우저 내 직접 파싱, 서버 부하 제로, SVG 출력 |
+| @rhwp/core | ^0.7.2 | HWP/HWPX WASM 파서 | 브라우저 내 직접 파싱, 서버 부하 제로, SVG 출력 (semver caret) |
 
 ### 3.2 백엔드
 
@@ -197,6 +221,7 @@ flowchart TB
 | Node.js | ESM | 런타임 | JavaScript/TypeScript 생태계, 비동기 I/O, Python spawn 용이 |
 | Express | ^4.21.2 | 웹 프레임워크 | 경량, 미들웨어 확장성, CORS/정적 파일 지원 |
 | Multer | ^2.0.2 | 파일 업로드 | 메모리 기반 처리(in-memory), 임시 파일 생성 최소화 |
+| cookie-parser | ^1.4.7 | 쿠키 파싱 | `httpOnly` 세션 쿠키 파싱 및 검증 |
 | dotenv | ^17.4.2 | 환경변수 관리 | `.env` 기반 API 키 관리, 런타임 주입 |
 
 ### 3.3 AI SDK
@@ -319,18 +344,18 @@ server/
 
 ```
 [사용자 PC]
-  ├── Client (Vite dev server) : http://127.0.0.1:5188
+  ├── Client (Vite dev server) : http://127.0.0.1:5192
   │   └── /api  ──프록시──▶ Server
   │   └── /generated ──프록시──▶ Server
-  └── Server (Express)         : http://127.0.0.1:8788
+  └── Server (Express)         : http://127.0.0.1:8792
       └── Python 3 (spawn)     : scripts/build_hwpx.py
 ```
 
 ### 5.2 실행 명령
 
 ```bash
-cd v2
-npm install
+cd v4
+npm install   # postinstall: bash scripts/setup-rhwp-symlink.sh || true
 npm run dev   # concurrently로 client + server 동시 실행
 ```
 
@@ -338,8 +363,8 @@ npm run dev   # concurrently로 client + server 동시 실행
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `PORT` | 8788 | Express 서버 포트 |
-| `CLIENT_ORIGIN` | `http://127.0.0.1:5188` | CORS 허용 Origin |
+| `PORT` | 8792 | Express 서버 포트 |
+| `CLIENT_ORIGIN` | `http://127.0.0.1:5192` | CORS 허용 Origin |
 | `ANTHROPIC_API_KEY` | - | Anthropic API 키 |
 | `OPENAI_API_KEY` | - | OpenAI API 키 |
 | `KIMI_API_KEY` | - | Kimi API 키 |
@@ -356,6 +381,8 @@ npm run dev   # concurrently로 client + server 동시 실행
 | 신뢰성 (AI 실패 재시도) | `draft.js` 내 2회 시도 루프, 실패 시 명확한 에러 메시지 반환 |
 | 사용성 (Docker 불필요) | npm workspaces + concurrently로 단일 명령 실행 |
 | 확장성 (추가 Provider) | `providers-config.js`에 설정 추가만으로 신규 Provider 지원 |
+| 신규 UI 컴포넌트 | EmptyState(가이드+샘플), Toast(알림), ValidationPanel(검증결과) |
+| 샘플 문서 | `/api/samples` 정적 샘플 제공, `gonmun-basic` 포함 |
 | 접근성 (ARIA/키보드) | `Uploader`에 role/aria-label/tabIndex/Enter/Space 키 핸들러 |
 
 ---
