@@ -12,6 +12,7 @@ const v4Root = path.resolve(__dirname, '..', '..')
 const mappingPath = path.join(v4Root, 'specs', 'font-metrics-mapping.json')
 const mcfgBin = path.join(v4Root, '.venv', 'bin', 'mcfg')
 const fontMetricsDir = path.join(v4Root, 'specs', 'font-metrics')
+const generatedDir = path.join(v4Root, 'generated')
 
 export async function loadMapping() {
   try {
@@ -172,12 +173,32 @@ export async function validateFontMetrics(hwpxPath, { docType } = {}) {
     })
   }
 
+  let reportUrl = null
+  if (mapped.some((m) => m.specFile)) {
+    const reportName = `mcfg-${Date.now()}.metrics.html`
+    const reportPath = path.join(generatedDir, reportName)
+    try {
+      const kopubSpec = path.join(fontMetricsDir, 'kopub-batang.json')
+      const notoSpec = path.join(fontMetricsDir, 'noto-sans-kr.json')
+      if (existsSync(kopubSpec) && existsSync(notoSpec) && existsSync(generatedDir)) {
+        const htmlProc = await runProcess(mcfgBin,
+          ['compare', kopubSpec, notoSpec, '--format', 'html', '--output', reportPath],
+          v4Root, { timeoutMs: 15000 })
+        if (htmlProc.ok && existsSync(reportPath)) {
+          reportUrl = `/generated/${reportName}`
+        }
+      }
+    } catch (err) {
+      // 리포트 실패해도 검증 자체는 성공
+    }
+  }
+
   return {
     available: true,
     fontCount: fontFaces.length,
     mappedCount: mapped.filter((m) => m.specFile).length,
     violations,
-    reportUrl: null
+    reportUrl
   }
 }
 

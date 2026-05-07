@@ -126,3 +126,25 @@ describe('validateFontMetrics (integration)', () => {
     }
   })
 })
+
+describe('validateFontMetrics — HTML report path', () => {
+  beforeEach(() => {
+    runProcess.mockImplementation(async (_cmd, args) => {
+      if (args.includes('--format') && args.includes('html')) {
+        // mock html generation: 실제 파일은 안 만들어짐 → existsSync false → reportUrl=null
+        return { ok: true, stdout: '', stderr: '' }
+      }
+      return { ok: true, stdout: JSON.stringify({ advanceDiff: { mismatchCount: 3 } }), stderr: '' }
+    })
+  })
+
+  it('does not set reportUrl when html file is not actually written by mock', async () => {
+    const result = await validateFontMetrics(
+      path.join(fixtureDir, 'sample-with-fonts.hwpx'),
+      { docType: 'report' }
+    )
+    expect(result.available).toBe(true)
+    // mock 환경에서는 실제 html 파일이 안 만들어짐 → reportUrl null 유지가 정상
+    expect(result.reportUrl).toBeNull()
+  })
+})
