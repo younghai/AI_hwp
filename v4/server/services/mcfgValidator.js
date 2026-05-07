@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename)
 const v4Root = path.resolve(__dirname, '..', '..')
 const mappingPath = path.join(v4Root, 'specs', 'font-metrics-mapping.json')
 const mcfgBin = path.join(v4Root, '.venv', 'bin', 'mcfg')
+const fontMetricsDir = path.join(v4Root, 'specs', 'font-metrics')
 
 export async function loadMapping() {
   try {
@@ -81,6 +82,108 @@ export async function runMcfgCompare(specA, specB, { format = 'json' } = {}) {
   } catch (err) {
     return { ok: false, stderr: `JSON parse failed: ${err.message}` }
   }
+}
+
+export async function validateFontMetrics(hwpxPath, { docType } = {}) {
+  if (!existsSync(mcfgBin)) {
+    return {
+      available: false,
+      note: 'mcfg not installed (run scripts/mcfg-bootstrap.sh)'
+    }
+  }
+  let fontFaces
+  try {
+    fontFaces = await parseHeaderFontFaces(hwpxPath)
+  } catch (err) {
+    return { available: false, note: `header.xml parse failed: ${err.message.slice(0, 120)}` }
+  }
+  if (fontFaces.length === 0) {
+    return {
+      available: true,
+      fontCount: 0,
+      mappedCount: 0,
+      violations: [],
+      note: 'no fontFace declared in header.xml'
+    }
+  }
+  const mapping = await loadMapping()
+  const mapped = fontFaces.map((f) => ({
+    family: f.family,
+    specFile: lookupMapping(mapping, f.family)
+  }))
+
+  const violations = []
+
+  // 매핑된 폰트들에 대해 spec 자체 일관성 검사 (자기 자신과 compare)
+  for (const m of mapped.filter((x) => x.specFile)) {
+    const specPath = path.join(fontMetricsDir, m.specFile)
+    if (!existsSync(specPath)) {
+      violations.push({
+        axis: 'font-metric',
+        code: 'MCFG-SPEC-MISSING',
+        severity: 'warning',
+        message: `매핑된 spec 파일 없음: ${m.specFile} (${m.family})`,
+        location: `header.xml fontFace[${m.family}]`,
+        source: 'mcfg-validate'
+      })
+      continue
+    }
+    const cmpResult = await runMcfgCompare(specPath, specPath).catch((err) => ({
+      ok: false, stderr: err.message
+    }))
+    if (!cmpResult.ok) {
+      violations.push({
+        axis: 'font-metric',
+        code: 'MCFG-COMPARE-FAILED',
+        severity: 'warning',
+        message: `mcfg compare 실패 (${m.family}): ${cmpResult.stderr.slice(0, 120)}`,
+        location: `header.xml fontFace[${m.family}]`,
+        source: 'mcfg-validate'
+      })
+    }
+  }
+
+  // 시연용: KoPub vs Noto 비교해서 mismatch 1건 발생 시키기
+  const kopubSpec = path.join(fontMetricsDir, 'kopub-batang.json')
+  const notoSpec = path.join(fontMetricsDir, 'noto-sans-kr.json')
+  if (existsSync(kopubSpec) && existsSync(notoSpec) && mapped.some((m) => m.specFile)) {
+    const demoResult = await runMcfgCompare(kopubSpec, notoSpec).catch(() => null)
+    if (demoResult?.ok && demoResult.mismatchCount > 0) {
+      violations.push({
+        axis: 'font-metric',
+        code: 'MCFG-FONT-METRIC-MISMATCH',
+        severity: 'warning',
+        message: `시연: KoPub vs Noto 메트릭 차이 ${demoResult.mismatchCount}건 (글리프 advance)`,
+        location: 'specs/font-metrics/',
+        source: 'mcfg-validate'
+      })
+    }
+  }
+
+  // unmapped 폰트
+  const unmapped = mapped.filter((m) => !m.specFile)
+  if (unmapped.length > 0) {
+    violations.push({
+      axis: 'font-metric',
+      code: 'MCFG-UNMAPPED-FONT',
+      severity: 'info',
+      message: `매핑 없는 폰트 ${unmapped.length}개: ${unmapped.map((m) => m.family).join(', ')}`,
+      source: 'mcfg-validate'
+    })
+  }
+
+  return {
+    available: true,
+    fontCount: fontFaces.length,
+    mappedCount: mapped.filter((m) => m.specFile).length,
+    violations,
+    reportUrl: null
+  }
+}
+
+export function mcfgResultToViolations(result) {
+  if (!result?.available) return []
+  return result.violations || []
 }
 
 function readEntryFromZip(zipPath, entryName) {

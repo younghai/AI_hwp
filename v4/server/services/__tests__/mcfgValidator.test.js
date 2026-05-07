@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseHeaderFontFaces } from '../mcfgValidator.js'
 import { loadMapping, lookupMapping } from '../mcfgValidator.js'
 import { runMcfgCompare } from '../mcfgValidator.js'
+import { validateFontMetrics } from '../mcfgValidator.js'
 
 vi.mock('../../lib/utils.js', () => ({
   runProcess: vi.fn()
@@ -81,5 +82,47 @@ describe('runMcfgCompare', () => {
     })
     const result = await runMcfgCompare('/tmp/a.json', '/tmp/b.json')
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('validateFontMetrics (integration)', () => {
+  beforeEach(() => {
+    runProcess.mockImplementation(async (_cmd, args) => {
+      if (args[0] === 'compare') {
+        return { ok: true, stdout: JSON.stringify({ advanceDiff: { mismatchCount: 3 } }), stderr: '' }
+      }
+      return { ok: false, stderr: 'unexpected mock call' }
+    })
+  })
+
+  it('returns available:false when mcfg binary missing', async () => {
+    const result = await validateFontMetrics('/tmp/nonexistent-' + Date.now() + '.hwpx', { docType: 'report' })
+    if (!result.available) {
+      expect(result.note).toMatch(/not installed|parse failed/i)
+    }
+  })
+
+  it('handles HWPX with no fontFace declared', async () => {
+    const result = await validateFontMetrics(
+      path.join(fixtureDir, 'sample-no-fonts.hwpx'),
+      { docType: 'report' }
+    )
+    expect(result.available).toBe(true)
+    expect(result.fontCount).toBe(0)
+    expect(result.violations).toEqual([])
+  })
+
+  it('returns violations when fontFace exists', async () => {
+    const result = await validateFontMetrics(
+      path.join(fixtureDir, 'sample-with-fonts.hwpx'),
+      { docType: 'report' }
+    )
+    if (result.available) {
+      expect(result.fontCount).toBe(3)
+      expect(result.violations.length).toBeGreaterThan(0)
+      const codes = result.violations.map((v) => v.code)
+      expect(codes).toContain('MCFG-UNMAPPED-FONT')
+      expect(codes).toContain('MCFG-FONT-METRIC-MISMATCH')
+    }
   })
 })
