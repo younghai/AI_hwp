@@ -1,8 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { parseHeaderFontFaces } from '../mcfgValidator.js'
 import { loadMapping, lookupMapping } from '../mcfgValidator.js'
+import { runMcfgCompare } from '../mcfgValidator.js'
+
+vi.mock('../../lib/utils.js', () => ({
+  runProcess: vi.fn()
+}))
+import { runProcess } from '../../lib/utils.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const fixtureDir = path.resolve(__dirname, '../../../tests/fixtures')
@@ -45,5 +51,35 @@ describe('lookupMapping', () => {
   it('returns null for unknown family', async () => {
     const mapping = await loadMapping()
     expect(lookupMapping(mapping, 'Some-Random-Font')).toBe(null)
+  })
+})
+
+describe('runMcfgCompare', () => {
+  it('returns ok=true with parsed JSON when mcfg succeeds', async () => {
+    runProcess.mockResolvedValue({
+      ok: true,
+      stdout: JSON.stringify({ advanceDiff: { commonCount: 10, mismatchCount: 2, samples: [] } }),
+      stderr: ''
+    })
+    const result = await runMcfgCompare('/tmp/a.json', '/tmp/b.json')
+    expect(result.ok).toBe(true)
+    expect(result.mismatchCount).toBe(2)
+  })
+
+  it('returns ok=false when mcfg exits non-zero', async () => {
+    runProcess.mockResolvedValue({
+      ok: false, stdout: '', stderr: 'mcfg: file not found'
+    })
+    const result = await runMcfgCompare('/tmp/a.json', '/tmp/b.json')
+    expect(result.ok).toBe(false)
+    expect(result.stderr).toContain('file not found')
+  })
+
+  it('returns ok=false on JSON parse failure', async () => {
+    runProcess.mockResolvedValue({
+      ok: true, stdout: 'not valid json {{{', stderr: ''
+    })
+    const result = await runMcfgCompare('/tmp/a.json', '/tmp/b.json')
+    expect(result.ok).toBe(false)
   })
 })

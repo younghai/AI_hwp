@@ -4,11 +4,13 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import yauzl from 'yauzl'
 import { XMLParser } from 'fast-xml-parser'
+import { runProcess } from '../lib/utils.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const v4Root = path.resolve(__dirname, '..', '..')
 const mappingPath = path.join(v4Root, 'specs', 'font-metrics-mapping.json')
+const mcfgBin = path.join(v4Root, '.venv', 'bin', 'mcfg')
 
 export async function loadMapping() {
   try {
@@ -64,6 +66,21 @@ function extractFontFaces(node) {
   }
   walk(node)
   return result
+}
+
+export async function runMcfgCompare(specA, specB, { format = 'json' } = {}) {
+  const args = ['compare', specA, specB, '--format', format]
+  const proc = await runProcess(mcfgBin, args, v4Root, { timeoutMs: 15000 })
+  if (!proc.ok) {
+    return { ok: false, stderr: (proc.stderr || '').slice(0, 200) }
+  }
+  try {
+    const parsed = JSON.parse(proc.stdout)
+    const mismatchCount = parsed?.advanceDiff?.mismatchCount ?? 0
+    return { ok: true, raw: parsed, mismatchCount }
+  } catch (err) {
+    return { ok: false, stderr: `JSON parse failed: ${err.message}` }
+  }
 }
 
 function readEntryFromZip(zipPath, entryName) {
