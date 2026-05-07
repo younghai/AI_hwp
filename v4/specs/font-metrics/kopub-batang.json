@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "filename": "KoPubBatang-Regular.ttf",
+    "extractorVersion": "0.2.3-fixture",
+    "extractedAt": "2026-05-07T00:00:00Z",
+    "note": "fixture — 라이브 추출 시 자동 갱신"
+  },
+  "global": {
+    "unitsPerEm": 1000,
+    "head": {"yMin": -222, "yMax": 1010},
+    "hhea": {"ascent": 880, "descent": -120, "lineGap": 0, "advanceWidthMax": 1500},
+    "os2": {
+      "sTypoAscender": 880, "sTypoDescender": -120, "sTypoLineGap": 200,
+      "usWinAscent": 1080, "usWinDescent": 322,
+      "sCapHeight": 700
+    },
+    "post": {"underlinePosition": -100, "italicAngle": 0}
+  },
+  "glyphs": {
+    "U+0020": {"advanceWidth": 250},
+    "U+0041": {"advanceWidth": 583},
+    "U+AC00": {"advanceWidth": 1000},
+    "U+D55C": {"advanceWidth": 1000}
+  },
+  "kerning": []
+}

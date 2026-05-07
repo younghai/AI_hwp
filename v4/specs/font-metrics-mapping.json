@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "mappings": {
+    "함초롱바탕": "kopub-batang.json",
+    "함초롱돋움": "noto-sans-kr.json",
+    "HY헤드라인M": "noto-sans-kr.json",
+    "HY헤드라인": "noto-sans-kr.json",
+    "한컴바탕": "kopub-batang.json",
+    "맑은 고딕": "noto-sans-kr.json",
+    "Noto Sans KR": "noto-sans-kr.json",
+    "KoPub Batang": "kopub-batang.json"
+  },
+  "note": "본 매핑은 데모용. 한컴 폰트 메트릭이 들어오면 일대일 매핑으로 교체."
+}

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "filename": "NotoSansKR-Regular.ttf",
+    "extractorVersion": "0.2.3-fixture",
+    "extractedAt": "2026-05-07T00:00:00Z",
+    "note": "fixture — 의도적으로 KoPub와 advance가 다른 글리프 1개 포함 (시연용)"
+  },
+  "global": {
+    "unitsPerEm": 1000,
+    "head": {"yMin": -288, "yMax": 1126},
+    "hhea": {"ascent": 1069, "descent": -293, "lineGap": 0, "advanceWidthMax": 1572},
+    "os2": {
+      "sTypoAscender": 880, "sTypoDescender": -120, "sTypoLineGap": 200,
+      "usWinAscent": 1126, "usWinDescent": 288,
+      "sCapHeight": 700
+    },
+    "post": {"underlinePosition": -150, "italicAngle": 0}
+  },
+  "glyphs": {
+    "U+0020": {"advanceWidth": 257},
+    "U+0041": {"advanceWidth": 575},
+    "U+AC00": {"advanceWidth": 1000},
+    "U+D55C": {"advanceWidth": 1024}
+  },
+  "kerning": []
+}
