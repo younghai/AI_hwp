@@ -99,6 +99,42 @@ else
 fi
 
 echo ""
+echo "=== 7. MCFG (M6) ==="
+if [ -x "$V3_ROOT/.venv/bin/mcfg" ]; then
+  MCFG_VER=$("$V3_ROOT/.venv/bin/mcfg" --version 2>&1 || true)
+  if [ -n "$MCFG_VER" ]; then
+    pass "mcfg --version OK ($MCFG_VER)"
+  else
+    fail "mcfg binary present but --version failed"
+  fi
+else
+  fail "mcfg not bootstrapped (run scripts/mcfg-bootstrap.sh)"
+fi
+
+# 응답에 mcfg-validate 엔진 + reportUrl 확인 (RESP_JSON 은 섹션 6 에서 생성됨)
+if [ -s "$RESP_JSON" ] && command -v jq >/dev/null 2>&1; then
+  if jq -e '.validation.engines[] | select(.name=="mcfg-validate")' "$RESP_JSON" >/dev/null 2>&1; then
+    pass "mcfg-validate engine present in /api/export-hwpx response"
+  else
+    fail "mcfg-validate engine missing from response"
+  fi
+  if jq -e '.validation.mcfgReportUrl' "$RESP_JSON" >/dev/null 2>&1; then
+    REPORT_URL=$(jq -r '.validation.mcfgReportUrl // empty' "$RESP_JSON")
+    if [ -n "$REPORT_URL" ]; then
+      pass "mcfgReportUrl present: $REPORT_URL"
+    else
+      pass "mcfgReportUrl null (no mapped fonts — informational)"
+    fi
+  else
+    fail "mcfgReportUrl field missing from response"
+  fi
+elif [ ! -s "$RESP_JSON" ]; then
+  fail "RESP_JSON empty — section 6 export failed, skipping MCFG response checks"
+else
+  fail "jq not found — cannot parse MCFG response fields"
+fi
+
+echo ""
 if [ "${FAILED:-0}" = "0" ]; then
   echo -e "\033[32m=== PASS: 모든 smoke test 통과 ===\033[0m"
   exit 0
