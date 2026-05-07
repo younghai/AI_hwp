@@ -33,11 +33,15 @@ if [ -x "$VENV/bin/mcfg" ] && "$VENV/bin/mcfg" --version >/dev/null 2>&1; then
   exit 0
 fi
 
+# Atomic install: cleanup partial venv if install fails downstream.
+trap 'rc=$?; if [ $rc -ne 0 ] && [ -d "$VENV" ] && [ ! -x "$VENV/bin/mcfg" ]; then echo "[warn] install aborted (rc=$rc), removing partial venv $VENV" >&2; rm -rf "$VENV"; fi; exit $rc' EXIT
+
 # 3. venv 생성 + pip install
 echo "[info] creating venv at $VENV"
 "$PYTHON" -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip --quiet
 
+echo "[info] this may take 30-60s on first run (downloading from GitHub)..."
 echo "[info] installing polaris_mcfg @ v$MCFG_VERSION"
 "$VENV/bin/pip" install --quiet \
   "git+https://github.com/PolarisOffice/polaris_mcfg.git@v$MCFG_VERSION"
