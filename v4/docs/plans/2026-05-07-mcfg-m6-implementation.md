@@ -230,8 +230,8 @@ Polaris MCFG (v0.2.3) `mcfg extract` 출력 형식 (schemaVersion 1) 의
 {
   "schemaVersion": 1,
   "mappings": {
-    "함초롱바탕": "kopub-batang.json",
-    "함초롱돋움": "noto-sans-kr.json",
+    "함초롬바탕": "kopub-batang.json",
+    "함초롬돋움": "noto-sans-kr.json",
     "HY헤드라인M": "noto-sans-kr.json",
     "HY헤드라인": "noto-sans-kr.json",
     "한컴바탕": "kopub-batang.json",
@@ -305,7 +305,7 @@ const HEADER_WITH_FONTS = `<?xml version="1.0" encoding="UTF-8"?>
   <hh:refList>
     <hh:fontfaces>
       <hh:fontface lang="hangul">
-        <hh:font id="0" type="ttf" name="함초롱바탕"/>
+        <hh:font id="0" type="ttf" name="함초롬바탕"/>
         <hh:font id="1" type="ttf" name="HY헤드라인M"/>
         <hh:font id="2" type="ttf" name="UnknownFont"/>
       </hh:fontface>
@@ -364,7 +364,7 @@ Expected: 첫 두 개는 zip 목록 출력, 세 번째는 "data" 또는 zip이�
 git add v4/tests/fixtures/ v4/server/package.json v4/server/package-lock.json v4/package-lock.json
 git commit -m "test(mcfg): add HWPX fixtures for mcfgValidator unit tests
 
-- sample-with-fonts.hwpx: 3개 fontFace (함초롱바탕, HY헤드라인M, UnknownFont)
+- sample-with-fonts.hwpx: 3개 fontFace (함초롬바탕, HY헤드라인M, UnknownFont)
 - sample-no-fonts.hwpx: refList 비어있음
 - sample-corrupt.hwpx: zip 헤더 깨진 buffer
 - @zip.js/zip.js devDep 추가
@@ -402,7 +402,7 @@ describe('parseHeaderFontFaces', () => {
   it('extracts font family names from header.xml', async () => {
     const result = await parseHeaderFontFaces(path.join(fixtureDir, 'sample-with-fonts.hwpx'))
     expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({ family: '함초롱바탕' }),
+      expect.objectContaining({ family: '함초롬바탕' }),
       expect.objectContaining({ family: 'HY헤드라인M' }),
       expect.objectContaining({ family: 'UnknownFont' })
     ]))
@@ -548,13 +548,13 @@ import { loadMapping, lookupMapping } from '../mcfgValidator.js'
 describe('lookupMapping', () => {
   it('matches NFC-normalized family name', async () => {
     const mapping = await loadMapping()
-    expect(lookupMapping(mapping, '함초롱바탕')).toBe('kopub-batang.json')
+    expect(lookupMapping(mapping, '함초롬바탕')).toBe('kopub-batang.json')
     expect(lookupMapping(mapping, 'HY헤드라인M')).toBe('noto-sans-kr.json')
   })
 
   it('matches NFD-input by normalizing to NFC', async () => {
     const mapping = await loadMapping()
-    const nfd = '함초롱바탕'.normalize('NFD')
+    const nfd = '함초롬바탕'.normalize('NFD')
     expect(lookupMapping(mapping, nfd)).toBe('kopub-batang.json')
   })
 
@@ -730,7 +730,7 @@ describe('validateFontMetrics (integration)', () => {
   })
 
   it('returns unmapped warning when no font has spec', async () => {
-    // fixture 가 함초롱바탕(매핑 있음) + UnknownFont(매핑 없음)
+    // fixture 가 함초롬바탕(매핑 있음) + UnknownFont(매핑 없음)
     const result = await validateFontMetrics(
       path.join(fixtureDir, 'sample-with-fonts.hwpx'),
       { docType: 'report' }
@@ -1062,7 +1062,7 @@ ls v4/specs/*.json 2>/dev/null
 {
   "...": "기존 필드 보존",
   "mcfg": {
-    "expectedFonts": ["함초롱바탕", "HY헤드라인M"],
+    "expectedFonts": ["함초롬바탕", "HY헤드라인M"],
     "tolerance": 1,
     "strictness": "warn",
     "note": "M6 Polaris MCFG. 한컴 EULA 통과 시 referenceSpec 추가."

@@ -18,7 +18,7 @@ describe('parseHeaderFontFaces', () => {
   it('extracts font family names from header.xml', async () => {
     const result = await parseHeaderFontFaces(path.join(fixtureDir, 'sample-with-fonts.hwpx'))
     expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({ family: '함초롱바탕' }),
+      expect.objectContaining({ family: '함초롬바탕' }),
       expect.objectContaining({ family: 'HY헤드라인M' }),
       expect.objectContaining({ family: 'UnknownFont' })
     ]))
@@ -39,13 +39,13 @@ describe('parseHeaderFontFaces', () => {
 describe('lookupMapping', () => {
   it('matches NFC-normalized family name', async () => {
     const mapping = await loadMapping()
-    expect(lookupMapping(mapping, '함초롱바탕')).toBe('kopub-batang.json')
+    expect(lookupMapping(mapping, '함초롬바탕')).toBe('kopub-batang.json')
     expect(lookupMapping(mapping, 'HY헤드라인M')).toBe('noto-sans-kr.json')
   })
 
   it('matches NFD-input by normalizing to NFC', async () => {
     const mapping = await loadMapping()
-    const nfd = '함초롱바탕'.normalize('NFD')
+    const nfd = '함초롬바탕'.normalize('NFD')
     expect(lookupMapping(mapping, nfd)).toBe('kopub-batang.json')
   })
 

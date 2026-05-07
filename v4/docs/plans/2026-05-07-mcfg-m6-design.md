@@ -10,7 +10,7 @@
 v4 HWPX 빌드 파이프라인에 **4번째 검증 엔진(폰트 메트릭)** 을 추가해, R1(미리보기 = 다운로드 바이트) 위반의 한 축인 "폰트 폴백으로 인한 advance width drift" 를 정량 진단할 수 있게 한다.
 
 ### Non-Goals
-- 한컴 폰트(HY헤드라인M, 함초롱바탕) 메트릭의 실제 추출 — EULA 검토 미완. 본 작업은 **OFL 폰트(KoPub Batang, Noto Sans KR) 데모/스켈레톤** 만.
+- 한컴 폰트(HY헤드라인M, 함초롬바탕) 메트릭의 실제 추출 — EULA 검토 미완. 본 작업은 **OFL 폰트(KoPub Batang, Noto Sans KR) 데모/스켈레톤** 만.
 - 페이지 드리프트(2→3) 자체의 fix — 그건 R5(linesegarray)/build_hwpx.py 영역. 본 작업은 진단 도구만 제공.
 - M5 (named field 슬롯 채우기) 와의 통합 — 직교한 작업, 별도 진행.
 
@@ -161,8 +161,8 @@ git -C "$V4_ROOT" diff --stat specs/font-metrics/kopub-batang.json
 {
   "schemaVersion": 1,
   "mappings": {
-    "함초롱바탕": "kopub-batang.json",
-    "함초롱돋움": "noto-sans-kr.json",
+    "함초롬바탕": "kopub-batang.json",
+    "함초롬돋움": "noto-sans-kr.json",
     "HY헤드라인M": "noto-sans-kr.json",
     "한컴바탕": "kopub-batang.json"
   },
@@ -327,7 +327,7 @@ export function McfgReportFrame({ reportUrl }) {
 {
   "rules": { "minPages": 1, "..." },
   "mcfg": {
-    "expectedFonts": ["함초롱바탕", "HY헤드라인M"],
+    "expectedFonts": ["함초롬바탕", "HY헤드라인M"],
     "tolerance": 1,
     "strictness": "warn"
   }

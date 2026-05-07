@@ -22,7 +22,7 @@ const HEADER_WITH_FONTS = `<?xml version="1.0" encoding="UTF-8"?>
   <hh:refList>
     <hh:fontfaces>
       <hh:fontface lang="hangul">
-        <hh:font id="0" type="ttf" name="함초롱바탕"/>
+        <hh:font id="0" type="ttf" name="함초롬바탕"/>
         <hh:font id="1" type="ttf" name="HY헤드라인M"/>
         <hh:font id="2" type="ttf" name="UnknownFont"/>
       </hh:fontface>

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "mappings": {
-    "함초롱바탕": "kopub-batang.json",
-    "함초롱돋움": "noto-sans-kr.json",
+    "함초롬바탕": "kopub-batang.json",
+    "함초롬돋움": "noto-sans-kr.json",
     "HY헤드라인M": "noto-sans-kr.json",
     "HY헤드라인": "noto-sans-kr.json",
     "한컴바탕": "kopub-batang.json",

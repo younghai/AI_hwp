@@ -3,7 +3,7 @@
     "font": ["바탕", "바탕체", "함초롬바탕", "HY헤드라인M", "맑은 고딕", "돋움", "굴림"]
   },
   "mcfg": {
-    "expectedFonts": ["함초롱바탕", "HY헤드라인M"],
+    "expectedFonts": ["함초롬바탕", "HY헤드라인M"],
     "tolerance": 1,
     "strictness": "warn",
     "note": "M6 Polaris MCFG. 한컴 EULA 통과 시 referenceSpec 추가."
