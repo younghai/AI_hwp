@@ -8,6 +8,53 @@
 
 ---
 
+## 2026-05-07 — M6 Polaris MCFG 통합 (4번째 검증 엔진)
+
+### What happened
+- v4 HWPX 빌드 파이프라인에 폰트 메트릭 검증을 추가하기 위해 polaris_mcfg(v0.2.3) 통합. 4번째 검증 엔진(`mcfg-validate`)이 기존 v3-native + polaris-dvc + rhwp-wasm 옆에 합류.
+- ValidationPanel 에 "검증 결과 / 폰트 메트릭" 두 탭. 폰트 메트릭 탭은 `mcfg compare --format html` 결과를 sandboxed iframe 으로 렌더.
+- 작업 중 두 가지 정정 발생:
+  1) `v0.2.4` 태그가 upstream 에 없음 (latest=v0.2.3) → plan/script 모두 `v0.2.3` 으로 정정
+  2) "함초롱바탕"(롱, U+B871) 은 흔한 오기. 정식 한컴 폰트는 "함초롬바탕"(롬, U+B86C). spec/mapping/fixture/test 7 파일 일괄 정정.
+
+### Why
+- pyproject.toml 의 `[project] version = "0.2.4"` 과 git tag 사이 차이 — pyproject 가 다음 릴리스를 미리 bump 한 상태에서 tag 미릴리스. version pin 시 항상 태그 존재 확인 필요.
+- 한글 자모 결합형은 시각적으로 거의 같지만 코드포인트가 다른 경우(롬 vs 롱) 가 흔함. spec 데이터 작성 시 정식 폰트명을 직접 확인하지 않으면 mapping miss.
+
+### Fix
+- `scripts/mcfg-bootstrap.sh`: idempotent venv + `pip install git+https://...@v0.2.3` + Python 3.10+ fallback chain (`python3.14 → python3` 순) + 트랩 기반 atomic install (실패 시 partial venv 자동 제거)
+- `server/services/mcfgValidator.js`: `parseHeaderFontFaces` (yauzl + fast-xml-parser, NFC 정규화) + `loadMapping` + `lookupMapping` + `runMcfgCompare` + `validateFontMetrics` + `mcfgResultToViolations` — 13건 unit test
+- `server/services/validator.js`: `Promise.all` 4번째 엔진 합류, `mcfgReportUrl` 응답 노출
+- `client/src/components/{McfgReportFrame,ValidationPanel}.jsx`: sandbox iframe + tab 그룹
+- `specs/font-metrics/{kopub-batang,noto-sans-kr}.json` + `font-metrics-mapping.json` (Polaris schema v1)
+- `specs/{report,proposal,minutes,gonmun}.json` 에 `mcfg.expectedFonts` 섹션 (P5)
+- `scripts/extract-font-metrics.sh` (B+α): KoPub Batang OFL 라이브 추출 — 21,118 글리프 메트릭이 fixture 자동 교체
+- `tools/smoke-test.sh` 7번째 섹션 + `tools/verify-mcfg-report.sh` (R1 증거)
+
+### Evidence (R1)
+- `bash tools/smoke-test.sh`: 7/7 sections PASS (mcfg --version OK, 4 engines, mcfgReportUrl present)
+- `bash tools/verify-mcfg-report.sh`: 5,398 byte report, advance/metric/font 키워드 + HTML markup 확인
+- `npx vitest run`: 13/13 server unit tests + 2/2 client component tests
+- `curl /api/export-hwpx | jq '.validation.engines[].name'` → 4 entries 출력
+
+### Limitations / Non-Goals
+- 한컴 폰트(HY헤드라인M, 함초롬바탕) 메트릭은 본 작업에서 추출하지 않음 — EULA 검토 미완. 본 작업은 OFL 폰트(KoPub Batang, Noto Sans KR) 데모/스켈레톤. 한컴 EULA 통과 시 `specs/font-metrics/*.json` 만 교체로 본 검증 가능 (코드 무변경).
+- 페이지 드리프트(2→3) 자체의 fix 는 본 작업 범위 외 — R5(linesegarray)/build_hwpx.py 영역.
+- mcfg compare 의 `--render-test` 는 uharfbuzz 선택 의존성 → 본 작업 P2/P3 에는 불필요.
+
+### Prevention
+- 외부 의존성 버전 pin 시 `gh api repos/<owner>/<repo>/git/refs/tags` 또는 `npm view <pkg> versions` 로 태그 존재 확인 후 pin (CLAUDE.md **R2**)
+- 한글 폰트명 입력 시 정식 명칭 직접 확인 (특히 한컴 자체 폰트는 함초롬/HY/한컴…). spec/mapping/test 일괄 작성 시 한 번 잘못 적으면 다른 데도 전염
+- 새 검증 엔진 추가는 graceful degradation 패턴 그대로 (`{available: false, note}`) 따라 빌드 자체는 안 막힘
+- 16 개 task TDD 사이클로 분해해 fresh subagent 1 dispatch + spec/quality review per task — 한 번에 큰 변경 vs 점진 통합 차이 체감
+
+### Refs
+- `docs/plans/2026-05-07-mcfg-m6-design.md`
+- `docs/plans/2026-05-07-mcfg-m6-implementation.md`
+- `vendor`: `https://github.com/PolarisOffice/polaris_mcfg.git@v0.2.3`
+
+---
+
 ## 2026-04-26 — v4 문서에 v2/v3 버전 식별자 잔여
 
 ### What happened
