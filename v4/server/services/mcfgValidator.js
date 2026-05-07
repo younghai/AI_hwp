@@ -8,6 +8,23 @@ import { XMLParser } from 'fast-xml-parser'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const v4Root = path.resolve(__dirname, '..', '..')
+const mappingPath = path.join(v4Root, 'specs', 'font-metrics-mapping.json')
+
+export async function loadMapping() {
+  try {
+    const raw = await readFile(mappingPath, 'utf-8')
+    const parsed = JSON.parse(raw)
+    return parsed.mappings || {}
+  } catch {
+    return {}
+  }
+}
+
+export function lookupMapping(mapping, familyRaw) {
+  if (!familyRaw || !mapping) return null
+  const family = String(familyRaw).normalize('NFC')
+  return mapping[family] || null
+}
 
 export async function parseHeaderFontFaces(hwpxPath) {
   const headerXml = await readEntryFromZip(hwpxPath, 'Contents/header.xml')
