@@ -1184,3 +1184,26 @@ small.helper {
   border-radius: 6px;
   background: #fff;
 }
+
+/* ════════ M6 — validation tabs ════════ */
+.validation-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.validation-tabs button {
+  background: transparent;
+  border: 1px solid var(--border, #ddd);
+  padding: 6px 14px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.validation-tabs button.active {
+  background: var(--accent, #0a84ff);
+  color: white;
+  border-color: var(--accent, #0a84ff);
+}
+.validation-tabs button:hover:not(.active) {
+  background: var(--panel, rgba(255,255,255,0.6));
+}

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { McfgReportFrame } from './McfgReportFrame.jsx'
 
 const AXIS_META = {
   rule:      { label: '규칙 적합성',    icon: '📋', color: '#dc2626', desc: '폰트/크기/스타일 조직 규정 준수' },
@@ -15,6 +16,39 @@ function severityIcon(sev) {
 }
 
 export function ValidationPanel({ validation }) {
+  const [activeTab, setActiveTab] = useState('main')
+  const hasMcfg = Boolean(validation?.mcfgReportUrl) ||
+    validation?.engines?.some((e) => e.name === 'mcfg-validate' && e.available)
+
+  return (
+    <section className="validation-panel">
+      <div className="validation-tabs" role="tablist">
+        <button
+          type="button"
+          className={activeTab === 'main' ? 'active' : ''}
+          onClick={() => setActiveTab('main')}
+          aria-selected={activeTab === 'main'}
+          role="tab"
+        >검증 결과</button>
+        {hasMcfg && (
+          <button
+            type="button"
+            className={activeTab === 'mcfg' ? 'active' : ''}
+            onClick={() => setActiveTab('mcfg')}
+            aria-selected={activeTab === 'mcfg'}
+            role="tab"
+          >폰트 메트릭</button>
+        )}
+      </div>
+      <div role="tabpanel">
+        {activeTab === 'main' && <MainValidationView validation={validation} />}
+        {activeTab === 'mcfg' && <McfgReportFrame reportUrl={validation?.mcfgReportUrl} />}
+      </div>
+    </section>
+  )
+}
+
+function MainValidationView({ validation }) {
   const [expanded, setExpanded] = useState(new Set())
 
   const grouped = useMemo(() => {
@@ -46,7 +80,7 @@ export function ValidationPanel({ validation }) {
   }
 
   return (
-    <div className={`validation-panel is-${overallStatus}`} role="region" aria-label="HWPX 검증 결과">
+    <div className={`validation-main is-${overallStatus}`} role="region" aria-label="HWPX 검증 결과">
       <header className="validation-header">
         <div className="validation-summary">
           <span className="validation-icon" aria-hidden="true">
