@@ -4,11 +4,11 @@
 
 **Goal:** v4 HWPX 빌드 파이프라인에 4번째 검증 엔진(mcfg-validate)을 추가하고, ValidationPanel 에 폰트 메트릭 진단 탭을 노출한다.
 
-**Architecture:** Polaris MCFG(v0.2.4)를 v4/.venv 안에 pip install → mcfg CLI를 sub-process로 호출 → HWPX 의 fontFace 와 spec JSON 비교 → JSON+HTML 결과를 generated/ 에 떨어뜨려 ValidationPanel iframe 으로 렌더.
+**Architecture:** Polaris MCFG(v0.2.3)를 v4/.venv 안에 pip install → mcfg CLI를 sub-process로 호출 → HWPX 의 fontFace 와 spec JSON 비교 → JSON+HTML 결과를 generated/ 에 떨어뜨려 ValidationPanel iframe 으로 렌더.
 
 **Tech Stack:**
 - Server: Node.js 20+, Express, yauzl(zip), fast-xml-parser, runProcess(spawn)
-- Python venv: Python 3.10+, polaris_mcfg@v0.2.4, fontTools[woff], click
+- Python venv: Python 3.10+, polaris_mcfg@v0.2.3, fontTools[woff], click
 - Client: React, Vitest
 - Validation: 기존 v3-native + polaris-dvc + rhwp-wasm 옆에 mcfg-validate 합류
 
@@ -67,14 +67,14 @@ pkill -f "v4/server"
 
 ```bash
 #!/usr/bin/env bash
-# mcfg-bootstrap.sh — Polaris MCFG (v0.2.4) 1회 부트스트랩.
+# mcfg-bootstrap.sh — Polaris MCFG (v0.2.3) 1회 부트스트랩.
 # idempotent: 이미 설치돼 있으면 조기 return.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 V4_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VENV="$V4_ROOT/.venv"
-MCFG_VERSION="0.2.4"
+MCFG_VERSION="0.2.3"
 
 # 1. Python 3.10+ 검사
 if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3,10) else 1)" 2>/dev/null; then
@@ -113,18 +113,18 @@ chmod +x v4/scripts/mcfg-bootstrap.sh
 ```bash
 bash v4/scripts/mcfg-bootstrap.sh
 ```
-Expected: `mcfg, version 0.2.4` 출력 + `[ok] mcfg bootstrapped`. Network 차단 환경에서는 fail 가능 — 그 경우 기록하고 다음 태스크 진행.
+Expected: `mcfg, version 0.2.3` 출력 + `[ok] mcfg bootstrapped`. Network 차단 환경에서는 fail 가능 — 그 경우 기록하고 다음 태스크 진행.
 
 **Step 4: Idempotency 확인**
 ```bash
 bash v4/scripts/mcfg-bootstrap.sh
 ```
-Expected: `[ok] mcfg already installed (version=0.2.4)` 출력, exit 0.
+Expected: `[ok] mcfg already installed (version=0.2.3)` 출력, exit 0.
 
 **Step 5: Commit**
 ```bash
 git add v4/scripts/mcfg-bootstrap.sh
-git commit -m "feat(mcfg): bootstrap script for Polaris MCFG v0.2.4
+git commit -m "feat(mcfg): bootstrap script for Polaris MCFG v0.2.3
 
 scripts/mcfg-bootstrap.sh — idempotent venv + pip install.
 첫 실행 시 약 30-60초, 이미 설치돼 있으면 조기 return.
@@ -147,7 +147,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>"
 ```markdown
 # specs/font-metrics
 
-Polaris MCFG (v0.2.4) `mcfg extract` 출력 형식 (schemaVersion 1) 의
+Polaris MCFG (v0.2.3) `mcfg extract` 출력 형식 (schemaVersion 1) 의
 폰트 메트릭 spec 캐시.
 
 본 디렉토리의 파일은 **fixture(데모/스켈레톤)** 입니다 — 한컴 폰트 EULA
@@ -167,7 +167,7 @@ Polaris MCFG (v0.2.4) `mcfg extract` 출력 형식 (schemaVersion 1) 의
   "schemaVersion": 1,
   "source": {
     "filename": "KoPubBatang-Regular.ttf",
-    "extractorVersion": "0.2.4-fixture",
+    "extractorVersion": "0.2.3-fixture",
     "extractedAt": "2026-05-07T00:00:00Z",
     "note": "fixture — 라이브 추출 시 자동 갱신"
   },
@@ -199,7 +199,7 @@ Polaris MCFG (v0.2.4) `mcfg extract` 출력 형식 (schemaVersion 1) 의
   "schemaVersion": 1,
   "source": {
     "filename": "NotoSansKR-Regular.ttf",
-    "extractorVersion": "0.2.4-fixture",
+    "extractorVersion": "0.2.3-fixture",
     "extractedAt": "2026-05-07T00:00:00Z",
     "note": "fixture — 의도적으로 KoPub와 advance가 다른 글리프 1개 포함 (시연용)"
   },
@@ -1419,7 +1419,7 @@ bash v4/tools/verify-mcfg-report.sh
 **Step 4: ADR 또는 lessons-learned 업데이트**
 ```bash
 # v4/docs/lessons-learned.md 에 한 줄 추가:
-# "M6: Polaris MCFG (v0.2.4) 4번째 검증 엔진으로 통합. OFL fixture 데모. 
+# "M6: Polaris MCFG (v0.2.3) 4번째 검증 엔진으로 통합. OFL fixture 데모. 
 #  한컴 EULA 검토 후 spec JSON 교체로 본 검증 가능."
 ```
 

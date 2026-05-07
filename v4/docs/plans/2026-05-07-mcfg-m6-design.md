@@ -67,7 +67,7 @@ v4/
 
 ### 결정사항 (Section 1 Q&A 결과)
 
-- **submodule X** → `pip install git+https://github.com/PolarisOffice/polaris_mcfg.git@v0.2.4` (간결, requirements.txt 한 줄)
+- **submodule X** → `pip install git+https://github.com/PolarisOffice/polaris_mcfg.git@v0.2.3` (간결, requirements.txt 한 줄)
 - **.venv 위치**: `v4/.venv` 그대로 (기존 `pythonCmd` 검출 로직 재사용)
 - **HTML 리포트**: ValidationPanel **탭** 임베드 (사용자 흐름 안 끊음)
 - **mcfg 호출 방식**: CLI (sub-process), 우리 `runProcess` 패턴 그대로 — 라이브러리 import X
@@ -102,7 +102,7 @@ fi
 
 python3 -m venv "$V4_ROOT/.venv"
 "$V4_ROOT/.venv/bin/pip" install --upgrade pip
-"$V4_ROOT/.venv/bin/pip" install "git+https://github.com/PolarisOffice/polaris_mcfg.git@v0.2.4"
+"$V4_ROOT/.venv/bin/pip" install "git+https://github.com/PolarisOffice/polaris_mcfg.git@v0.2.3"
 "$V4_ROOT/.venv/bin/mcfg" --version
 echo "[ok] mcfg bootstrapped → $V4_ROOT/.venv/bin/mcfg"
 echo "[info] dev 서버 재시작 필요 (R3)"
@@ -136,7 +136,7 @@ git -C "$V4_ROOT" diff --stat specs/font-metrics/kopub-batang.json
   "schemaVersion": 1,
   "source": {
     "filename": "KoPubBatang-Regular.ttf",
-    "extractorVersion": "0.2.4-fixture",
+    "extractorVersion": "0.2.3-fixture",
     "extractedAt": "2026-05-07T00:00:00Z"
   },
   "global": {
@@ -411,7 +411,7 @@ res.json({ ok, fileName, validation: { engines, violations, mcfgReportUrl } })
 | 룰 | 적용 |
 |---|---|
 | R1 (E2E 증거) | smoke-test.sh 에 4번째 엔진 ping + 폰트 탭 표시 확인 |
-| R2 (버전 pin) | `polaris_mcfg.git@v0.2.4` 정확 tag pin |
+| R2 (버전 pin) | `polaris_mcfg.git@v0.2.3` 정확 tag pin |
 | R3 (서버 재시작) | bootstrap 스크립트 끝에 안내 |
 | R4 (Python/Node 경계) | mcfg stderr 구조화된 violation 으로만, 200자 절단 |
 | R7 (escape) | iframe sandbox + React 자동 escape |
@@ -449,7 +449,7 @@ res.json({ ok, fileName, validation: { engines, violations, mcfgReportUrl } })
 ### 4. 시각 검증 (수동, R1)
 
 ```
-1. scripts/mcfg-bootstrap.sh 실행 → mcfg 0.2.4 출력
+1. scripts/mcfg-bootstrap.sh 실행 → mcfg 0.2.3 출력
 2. npm run dev 재시작
 3. http://127.0.0.1:5192/ → 샘플 업로드 → 빌드
 4. ValidationPanel "폰트 메트릭" 탭 → iframe 렌더 확인
@@ -511,7 +511,7 @@ npm run dev; open http://127.0.0.1:5192/
 | 위험 | 영향도 | 완화 |
 |---|---|---|
 | 한컴 EULA — 메트릭 추출 권한 | 🔴 법적 | **본 작업 범위 외**. P1 데모는 OFL 폰트만 |
-| mcfg star=1, v0.2.4 초기 단계 | 🟡 | CLI 호출만, library import X. 우리 코드와 디커플 |
+| mcfg star=1, v0.2.3 초기 단계 | 🟡 | CLI 호출만, library import X. 우리 코드와 디커플 |
 | Python venv 추가 의존성 | 🟢 | 이미 build_hwpx.py 가 Python 사용. venv 격리 |
 | uharfbuzz 컴파일 (선택) | 🟡 | render 의존성 — 본 작업 P2/P3 에는 불필요 |
 | HWP fontFace ↔ TTF/OTF 매핑 갭 | 🟡 | mapping JSON 명시. 한컴 들어오면 일대일 교체 |
