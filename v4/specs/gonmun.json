@@ -4,5 +4,11 @@
   },
   "parashape": {
     "linespacingvalue": 160
+  },
+  "mcfg": {
+    "expectedFonts": ["함초롱바탕", "HY헤드라인M"],
+    "tolerance": 1,
+    "strictness": "warn",
+    "note": "M6 Polaris MCFG. 한컴 EULA 통과 시 referenceSpec 추가."
   }
 }
