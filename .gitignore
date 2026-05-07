@@ -22,3 +22,7 @@ node_modules/
 
 # polaris_dvc external clone (built via v3/scripts/setup-polaris-dvc.sh)
 polaris_dvc/
+v4/data/
+
+# Claude Code (worktrees, projects, plugin caches)
+.claude/
