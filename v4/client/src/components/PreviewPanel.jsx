@@ -1,8 +1,10 @@
-import { forwardRef } from 'react'
+import { forwardRef, useState } from 'react'
 import { DOC_TYPES, getDraftStageItems, getDraftItemStatus, getDraftSectionLabel } from '../lib/helpers.js'
 import { renderDiagramSvg } from '../lib/diagrams.js'
+import { RhwpEditorPanel } from './RhwpEditorPanel.jsx'
 
-export const PreviewPanel = forwardRef(function PreviewPanel({ draft, sourceInsight, docType, parseStatus, builtPreview }, ref) {
+export const PreviewPanel = forwardRef(function PreviewPanel({ draft, sourceInsight, docType, parseStatus, builtPreview, enableEditorBeta = false }, ref) {
+  const [editorOpen, setEditorOpen] = useState(false)
   const docTypeLabel = DOC_TYPES.find((o) => o.value === docType)?.label || docType
   const hasBuilt = Boolean(builtPreview && builtPreview.svgs && builtPreview.svgs.length > 0)
 
@@ -55,8 +57,24 @@ export const PreviewPanel = forwardRef(function PreviewPanel({ draft, sourceInsi
             </div>
           ))}
         </div>
+        {hasBuilt && enableEditorBeta && (
+          <div className="rhwp-editor-toggle">
+            <button type="button" onClick={() => setEditorOpen((v) => !v)}>
+              {editorOpen ? '미리보기로 돌아가기' : '편집 모드 (베타)'}
+            </button>
+            <span className="rhwp-editor-hint">
+              ⚠ 베타: HWPX 가 외부 호스트(rhwp-studio) iframe 으로 로드됩니다
+            </span>
+          </div>
+        )}
         <div className="svg-frame">
-          {hasBuilt ? (
+          {hasBuilt && enableEditorBeta && editorOpen ? (
+            <RhwpEditorPanel
+              hwpxUrl={builtPreview.url}
+              fileName={builtPreview.fileName}
+              onClose={() => setEditorOpen(false)}
+            />
+          ) : hasBuilt ? (
             <BuiltContent builtPreview={builtPreview} />
           ) : draft ? (
             <DraftContent draft={draft} />

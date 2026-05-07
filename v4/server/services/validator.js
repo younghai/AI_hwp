@@ -2,6 +2,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { runProcess } from '../lib/utils.js'
 import { validateWithPolarisDvc } from './polarisValidator.js'
+import { verifyHwpxWithRhwp, rhwpResultToViolations } from './rhwpVerifier.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -38,18 +39,20 @@ async function runNativeValidator(hwpxPath) {
  *   }
  */
 export async function validateHwpx(hwpxPath, { docType } = {}) {
-  const [native, polaris] = await Promise.all([
+  const [native, polaris, rhwp] = await Promise.all([
     runNativeValidator(hwpxPath),
     validateWithPolarisDvc(hwpxPath, { docType }).catch((err) => ({
       engine: 'polaris-dvc',
       available: false,
       violations: [],
       note: `polaris-dvc 실행 예외: ${err.message}`
-    }))
+    })),
+    verifyHwpxWithRhwp(hwpxPath)
   ])
 
   const polarisViolations = (polaris.violations || []).map((v) => ({ ...v, source: 'polaris-dvc' }))
-  const violations = [...native.violations, ...polarisViolations]
+  const rhwpViolations = rhwpResultToViolations(rhwp)
+  const violations = [...native.violations, ...polarisViolations, ...rhwpViolations]
   const errorCount = violations.filter((v) => v.severity === 'error').length
   const warningCount = violations.filter((v) => v.severity === 'warning').length
 
@@ -68,6 +71,17 @@ export async function validateHwpx(hwpxPath, { docType } = {}) {
         dvcStrict: polaris.dvcStrict,
         enableSchema: polaris.enableSchema,
         specPath: polaris.specPath
+      },
+      {
+        name: 'rhwp-wasm',
+        available: !!rhwp.available,
+        violationCount: rhwpViolations.length,
+        note: rhwp.note || (rhwp.available
+          ? `pageCount=${rhwp.pageCount}, format=${rhwp.sourceFormat}, warnings=${rhwp.warningCount}`
+          : undefined),
+        pageCount: rhwp.pageCount,
+        sourceFormat: rhwp.sourceFormat,
+        warningSummary: rhwp.warningSummary
       }
     ]
   }

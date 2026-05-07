@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { TopBar } from './components/TopBar.jsx'
 import { LoginOverlay } from './components/LoginOverlay.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { ProviderSettings } from './components/ProviderSettings.jsx'
 import { ControlPanel } from './components/ControlPanel.jsx'
 import { PreviewPanel } from './components/PreviewPanel.jsx'
@@ -13,8 +14,16 @@ import { useDraft } from './hooks/useDraft.js'
 import { useAuth } from './hooks/useAuth.js'
 import { useToast } from './hooks/useToast.js'
 
+// M4 베타 플래그: URL 에 ?editor=beta 가 붙으면 PreviewPanel 에 편집 모드 토글이 노출.
+function detectEditorBeta() {
+  if (typeof window === 'undefined') return false
+  try { return new URLSearchParams(window.location.search).get('editor') === 'beta' }
+  catch { return false }
+}
+
 export default function App() {
   const previewPanelRef = useRef(null)
+  const enableEditorBeta = detectEditorBeta()
 
   const [sourceFile, setSourceFile] = useState(null)
   const [aiApiKey] = useState('')
@@ -187,6 +196,7 @@ export default function App() {
             docType={docType}
             parseStatus={parseStatus}
             builtPreview={builtPreview}
+            enableEditorBeta={enableEditorBeta}
           />
 
           {exportState.validation && (

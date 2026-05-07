@@ -132,6 +132,42 @@ export function useRhwp() {
     setBuiltPreview(BUILT_INITIAL)
   }
 
+  // M3 PoC — rhwp 0.7.6+ 의 replaceOne 으로 업로드 원본에 텍스트 치환을
+  // 적용한 임시 미리보기를 만든다. saveSnapshot/restoreSnapshot 으로 비파괴.
+  async function previewWithReplacements(pairs, { maxPages = 3, caseSensitive = true } = {}) {
+    const doc = docRef.current
+    if (!doc) return null
+    if (!Array.isArray(pairs) || pairs.length === 0) return null
+    if (typeof doc.replaceOne !== 'function') {
+      console.warn('[useRhwp] replaceOne 미지원 (rhwp 0.7.6+ 필요)')
+      return null
+    }
+
+    const hasSnapshot = typeof doc.saveSnapshot === 'function'
+    if (hasSnapshot) doc.saveSnapshot()
+    try {
+      for (const { query, newText } of pairs) {
+        if (!query) continue
+        try {
+          doc.replaceOne(String(query), String(newText ?? ''), Boolean(caseSensitive))
+        } catch (err) {
+          console.warn('[useRhwp] replaceOne miss:', query, err?.message)
+        }
+      }
+      const totalPages = doc.pageCount() || 1
+      const limit = Math.min(totalPages, maxPages)
+      const svgs = []
+      for (let i = 0; i < limit; i += 1) svgs.push(doc.renderPageSvg(i))
+      return { svgs, pageCount: totalPages }
+    } finally {
+      if (hasSnapshot && typeof doc.restoreSnapshot === 'function') {
+        try { doc.restoreSnapshot() } catch (err) {
+          console.warn('[useRhwp] restoreSnapshot failed:', err?.message)
+        }
+      }
+    }
+  }
+
   return {
     sourceInsight,
     parseStatus,
@@ -139,6 +175,7 @@ export function useRhwp() {
     parseFile,
     builtPreview,
     renderBuiltHwpx,
-    clearBuiltPreview
+    clearBuiltPreview,
+    previewWithReplacements
   }
 }

@@ -22,6 +22,15 @@ app.use(cookieParser())
 app.use(express.json({ limit: '3mb' }))
 app.use('/generated', express.static(generatedDirectory))
 
+// 임시 진단 로그 — 모든 요청과 응답 상태/시간 찍는다 (M1-M4 인터랙티브 검증 후 제거).
+app.use((req, res, next) => {
+  const t0 = Date.now()
+  res.on('finish', () => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${Date.now() - t0}ms)`)
+  })
+  next()
+})
+
 app.use(healthRouter)
 app.use(providersRouter)
 app.use(draftRouter)
