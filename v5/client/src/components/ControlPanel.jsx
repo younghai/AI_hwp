@@ -18,7 +18,8 @@ export function ControlPanel({
   draftLoading, exportState, hasDraft,
   parseStatus,
   recentDocuments,
-  recentDocumentsLoading
+  recentDocumentsLoading,
+  onPreviewRecentDocument
 }) {
   return (
     <section className="control-column">
@@ -118,7 +119,11 @@ export function ControlPanel({
       </div>
 
       <div className="panel">
-        <RecentDocuments files={recentDocuments} loading={recentDocumentsLoading} />
+        <RecentDocuments
+          files={recentDocuments}
+          loading={recentDocumentsLoading}
+          onPreview={onPreviewRecentDocument}
+        />
       </div>
     </section>
   )

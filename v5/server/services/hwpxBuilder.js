@@ -41,6 +41,30 @@ const deleteGeneratedFileStmt = db.prepare(`
   WHERE file_id = ?
 `)
 
+const upsertGeneratedPreviewStmt = db.prepare(`
+  INSERT INTO generated_previews (
+    file_id, status, page_count, rendered_page_count, renderer, manifest_json, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(file_id) DO UPDATE SET
+    status = excluded.status,
+    page_count = excluded.page_count,
+    rendered_page_count = excluded.rendered_page_count,
+    renderer = excluded.renderer,
+    manifest_json = excluded.manifest_json,
+    updated_at = excluded.updated_at
+`)
+
+const getGeneratedPreviewStmt = db.prepare(`
+  SELECT file_id, status, page_count, rendered_page_count, renderer, manifest_json, created_at, updated_at
+  FROM generated_previews
+  WHERE file_id = ?
+`)
+
+const deleteGeneratedPreviewStmt = db.prepare(`
+  DELETE FROM generated_previews
+  WHERE file_id = ?
+`)
+
 function createWorkDir() {
   return fs.mkdtemp(path.join(tempRootDir, 'build-'))
 }
@@ -77,6 +101,7 @@ export async function getGeneratedFile(sessionId, fileId) {
     throw createHttpError('생성된 파일을 찾을 수 없습니다.', 404)
   }
   if (Date.now() > Number(entry.expires_at)) {
+    deleteGeneratedPreviewStmt.run(fileId)
     deleteGeneratedFileStmt.run(fileId)
     await fs.rm(entry.file_path, { force: true }).catch(() => {})
     throw createHttpError('생성된 파일의 다운로드 가능 시간이 만료되었습니다.', 410)
@@ -85,6 +110,7 @@ export async function getGeneratedFile(sessionId, fileId) {
     throw createHttpError('다른 사용자 세션의 생성 파일에는 접근할 수 없습니다.', 403)
   }
   if (!existsSync(entry.file_path)) {
+    deleteGeneratedPreviewStmt.run(fileId)
     deleteGeneratedFileStmt.run(fileId)
     throw createHttpError('생성된 파일이 더 이상 존재하지 않습니다.', 404)
   }
@@ -100,6 +126,78 @@ export async function getGeneratedFile(sessionId, fileId) {
   }
 }
 
+function parsePreviewRow(row) {
+  if (!row) return null
+  let manifest = null
+  try {
+    manifest = row.manifest_json ? JSON.parse(row.manifest_json) : null
+  } catch {
+    manifest = null
+  }
+  return {
+    status: row.status,
+    pageCount: Number(row.page_count || 0),
+    renderedPageCount: Number(row.rendered_page_count || 0),
+    renderer: row.renderer,
+    createdAt: Number(row.created_at || 0),
+    updatedAt: Number(row.updated_at || 0),
+    manifest
+  }
+}
+
+function toBoundedNumber(value, { min = 0, max = 500, fallback = 0 } = {}) {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return fallback
+  return Math.max(min, Math.min(max, Math.trunc(next)))
+}
+
+function normalizePreviewManifest(input, generated) {
+  const pageCount = toBoundedNumber(input?.pageCount, { min: 0, max: 500 })
+  const renderedPageCount = toBoundedNumber(input?.renderedPageCount, { min: 0, max: 50 })
+  const firstPageText = String(input?.firstPageText || '').slice(0, 600)
+  const renderer = String(input?.renderer || '@rhwp/core').slice(0, 80)
+  const source = String(input?.source || 'client').slice(0, 40)
+  const status = renderedPageCount > 0 ? 'ready' : 'failed'
+  return {
+    status,
+    pageCount,
+    renderedPageCount,
+    renderer,
+    manifest: {
+      fileId: generated.fileId,
+      fileName: generated.fileName,
+      status,
+      pageCount,
+      renderedPageCount,
+      renderer,
+      source,
+      firstPageText,
+      capturedAt: new Date().toISOString()
+    }
+  }
+}
+
+export async function recordGeneratedPreview(sessionId, fileId, input = {}) {
+  const generated = await getGeneratedFile(sessionId, fileId)
+  const normalized = normalizePreviewManifest(input, generated)
+  const now = Date.now()
+  const existing = getGeneratedPreviewStmt.get(fileId)
+  upsertGeneratedPreviewStmt.run(
+    fileId,
+    normalized.status,
+    normalized.pageCount,
+    normalized.renderedPageCount,
+    normalized.renderer,
+    JSON.stringify(normalized.manifest),
+    existing ? Number(existing.created_at) : now,
+    now
+  )
+  return {
+    ...parsePreviewRow(getGeneratedPreviewStmt.get(fileId)),
+    downloadUrl: `/api/generated/${fileId}`
+  }
+}
+
 export async function listGeneratedFiles(sessionId) {
   if (!sessionId) return []
   const now = Date.now()
@@ -110,6 +208,7 @@ export async function listGeneratedFiles(sessionId) {
       continue
     }
     if (!existsSync(row.file_path)) {
+      deleteGeneratedPreviewStmt.run(row.file_id)
       deleteGeneratedFileStmt.run(row.file_id)
       continue
     }
@@ -120,7 +219,8 @@ export async function listGeneratedFiles(sessionId) {
       createdAt: Number(row.created_at),
       expiresAt: Number(row.expires_at),
       validation: row.validation_json ? JSON.parse(row.validation_json) : null,
-      diagramReport: row.diagram_report_json ? JSON.parse(row.diagram_report_json) : null
+      diagramReport: row.diagram_report_json ? JSON.parse(row.diagram_report_json) : null,
+      preview: parsePreviewRow(getGeneratedPreviewStmt.get(row.file_id))
     })
   }
   return items
@@ -266,6 +366,7 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
   })
 
   return {
+    fileId,
     fileName: outputName,
     downloadUrl: `/api/generated/${fileId}`,
     message: usedTemplateFile

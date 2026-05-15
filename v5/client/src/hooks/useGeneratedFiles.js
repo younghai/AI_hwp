@@ -28,9 +28,33 @@ export function useGeneratedFiles(user) {
     }
   }, [user])
 
+  const recordPreview = useCallback(async ({ fileId, pageCount, renderedPageCount, firstPageText }) => {
+    if (!user || !fileId) return null
+    try {
+      const res = await fetch(`/api/generated/${fileId}/preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          pageCount,
+          renderedPageCount,
+          firstPageText,
+          renderer: '@rhwp/core',
+          source: 'client-preview'
+        })
+      })
+      const data = await res.json()
+      if (!res.ok || !data.ok) return null
+      await refresh()
+      return data.preview
+    } catch {
+      return null
+    }
+  }, [refresh, user])
+
   useEffect(() => {
     refresh()
   }, [refresh])
 
-  return { files, loading, refresh }
+  return { files, loading, refresh, recordPreview }
 }

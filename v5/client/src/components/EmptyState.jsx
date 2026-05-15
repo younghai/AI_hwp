@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
 
-export function EmptyState({ onTrySample }) {
+export function EmptyState({ onTrySample, enabled = true }) {
   const [samples, setSamples] = useState([])
   const [loadingId, setLoadingId] = useState(null)
 
   useEffect(() => {
+    if (!enabled) {
+      setSamples([])
+      return undefined
+    }
     let cancelled = false
     fetch('/api/samples', { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => { if (!cancelled && d.ok) setSamples(d.samples) })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [enabled])
 
   async function handleTry(sample) {
     setLoadingId(sample.id)

@@ -28,7 +28,12 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
 
   const { user, logout, loginWithPopup } = useAuth()
-  const { files: recentDocuments, loading: recentDocumentsLoading, refresh: refreshGeneratedFiles } = useGeneratedFiles(user)
+  const {
+    files: recentDocuments,
+    loading: recentDocumentsLoading,
+    refresh: refreshGeneratedFiles,
+    recordPreview
+  } = useGeneratedFiles(user)
   const autoLogin = import.meta.env.VITE_AUTO_LOGIN === 'true'
   const { toasts, dismiss, success, error: errorToast, info, warning } = useToast()
 
@@ -37,7 +42,7 @@ export default function App() {
   } = useProviders((err) => {
     console.warn('providers fetch failed', err)
     errorToast('AI provider 목록을 불러오지 못했습니다.')
-  })
+  }, Boolean(user))
 
   const {
     sourceInsight,
@@ -110,9 +115,19 @@ export default function App() {
     setParseStatus('AI 초안을 바탕으로 HWPX 파일을 생성하는 중입니다...')
     const built = await buildHwpx({ draftOverride: next, sourceFile, sourceInsight, docType })
     if (built?.url) {
-      await refreshGeneratedFiles()
       setParseStatus('HWPX를 렌더링해 미리보기에 반영합니다...')
       const rendered = await renderBuiltHwpx(built.url, built.fileName)
+      if (rendered && built.fileId) {
+        const savedPreview = await recordPreview({
+          fileId: built.fileId,
+          pageCount: rendered.pageCount,
+          renderedPageCount: rendered.svgs.length,
+          firstPageText: rendered.firstPageText
+        })
+        if (!savedPreview) await refreshGeneratedFiles()
+      } else {
+        await refreshGeneratedFiles()
+      }
       const diagramReport = built.diagramReport
       const requestedDiagrams = Number(diagramReport?.requestedCount || 0)
       const embeddedDiagrams = Number(diagramReport?.embeddedCount || 0)
@@ -160,6 +175,26 @@ export default function App() {
     downloadBuilt()
   }
 
+  async function handlePreviewRecentDocument(file) {
+    if (!file?.downloadUrl) return
+    setDraft(null)
+    setParseStatus(`${file.fileName} 미리보기를 다시 렌더링합니다...`)
+    const rendered = await renderBuiltHwpx(file.downloadUrl, file.fileName)
+    if (rendered) {
+      await recordPreview({
+        fileId: file.fileId,
+        pageCount: rendered.pageCount,
+        renderedPageCount: rendered.svgs.length,
+        firstPageText: rendered.firstPageText
+      })
+      setParseStatus(`${file.fileName} 미리보기를 최신 상태로 갱신했습니다.`)
+      scrollToPreview()
+      return
+    }
+    errorToast('최근 문서 미리보기를 렌더링하지 못했습니다.')
+    scrollToPreview()
+  }
+
   const showEmptyState = !sourceFile && !draft && !builtPreview.svgs.length
 
   return (
@@ -202,10 +237,11 @@ export default function App() {
           parseStatus={parseStatus}
           recentDocuments={recentDocuments}
           recentDocumentsLoading={recentDocumentsLoading}
+          onPreviewRecentDocument={handlePreviewRecentDocument}
         />
 
         <div className="preview-column">
-          {showEmptyState && <EmptyState onTrySample={handleTrySample} />}
+          {showEmptyState && <EmptyState onTrySample={handleTrySample} enabled={Boolean(user)} />}
 
           <PreviewPanel
             ref={previewPanelRef}

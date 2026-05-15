@@ -28,12 +28,12 @@ app.use(cors({ origin: CLIENT_ORIGIN, methods: ['GET', 'POST'], credentials: tru
 app.use(cookieParser())
 app.use(express.json({ limit: '3mb' }))
 
+app.use(googleAuthRouter)
 app.use(healthRouter)
 app.use(providersRouter)
 app.use(draftRouter)
 app.use(exportRouter)
 app.use(samplesRouter)
-app.use(googleAuthRouter)
 app.use(createAuthRouter({ oauthBase: OAUTH_BASE, clientOrigin: CLIENT_ORIGIN }))
 
 app.listen(PORT, '127.0.0.1', () => {

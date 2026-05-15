@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import initRhwp, { HwpDocument } from '@rhwp/core'
 import { extractTextFromSvg } from '../lib/helpers.js'
 
-const BUILT_INITIAL = { svgs: [], pageCount: 0, fileName: '', url: '' }
+const BUILT_INITIAL = { svgs: [], pageCount: 0, fileName: '', url: '', firstPageText: '' }
 
 export function useRhwp() {
   const docRef = useRef(null)
@@ -114,7 +114,8 @@ export function useRhwp() {
       for (let i = 0; i < maxPages; i += 1) {
         svgs.push(document.renderPageSvg(i))
       }
-      const next = { svgs, pageCount, fileName: fileName || '', url }
+      const firstPageText = extractTextFromSvg(svgs[0] || '').trim()
+      const next = { svgs, pageCount, fileName: fileName || '', url, firstPageText }
       setBuiltPreview(next)
       return next
     } catch (error) {

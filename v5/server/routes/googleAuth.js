@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import {
   createSession,
   destroySession,
-  getSession,
+  getSessionData,
   requireSession,
   SESSION_COOKIE_NAME
 } from '../lib/session.js'
@@ -180,9 +180,10 @@ router.get('/auth/google/mock', (req, res) => {
   res.send(resultPage(true, `${name} (${email})님, Mock 로그인 완료!`))
 })
 
-router.get('/api/me', requireSession, (req, res) => {
-  const user = getSession(req.sessionId)
-  res.json({ ok: true, user })
+router.get('/api/me', (req, res) => {
+  const sid = req.cookies?.[SESSION_COOKIE_NAME]
+  const session = getSessionData(sid)
+  res.json({ ok: true, user: session?.user || null })
 })
 
 router.post('/api/logout', requireSession, async (req, res) => {

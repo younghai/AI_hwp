@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { requireSession } from '../lib/session.js'
-import { buildHwpx, getGeneratedFile, listGeneratedFiles } from '../services/hwpxBuilder.js'
+import { buildHwpx, getGeneratedFile, listGeneratedFiles, recordGeneratedPreview } from '../services/hwpxBuilder.js'
 import { sendError } from '../lib/errors.js'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } })
@@ -41,6 +41,15 @@ router.get('/api/generated/:fileId', async (req, res) => {
     res.setHeader('Content-Type', 'application/hwp+zip')
     res.setHeader('Content-Disposition', `attachment; filename="${generated.fileName}"`)
     res.sendFile(generated.filePath)
+  } catch (error) {
+    sendError(res, error)
+  }
+})
+
+router.post('/api/generated/:fileId/preview', async (req, res) => {
+  try {
+    const preview = await recordGeneratedPreview(req.sessionId, req.params.fileId, req.body || {})
+    res.json({ ok: true, preview })
   } catch (error) {
     sendError(res, error)
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const STORAGE_KEY = 'v2-aiProvider'
 
@@ -20,9 +20,14 @@ function persistProvider(key) {
   } catch { /* ignore */ }
 }
 
-export function useProviders(onError) {
+export function useProviders(onError, enabled = true) {
   const [providers, setProviders] = useState([])
   const [aiProvider, setAiProviderState] = useState(readStoredProvider)
+  const onErrorRef = useRef(onError)
+
+  useEffect(() => {
+    onErrorRef.current = onError
+  }, [onError])
 
   const setAiProvider = useCallback((next) => {
     const resolved = typeof next === 'function' ? next(aiProvider) : next
@@ -31,6 +36,10 @@ export function useProviders(onError) {
   }, [aiProvider])
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      setProviders([])
+      return []
+    }
     try {
       const res = await fetch('/api/providers', { credentials: 'include' })
       if (res.status === 401) {
@@ -52,10 +61,10 @@ export function useProviders(onError) {
       }
       return data.providers || []
     } catch (err) {
-      onError?.(err)
+      onErrorRef.current?.(err)
       return []
     }
-  }, [onError])
+  }, [enabled])
 
   useEffect(() => {
     refresh()

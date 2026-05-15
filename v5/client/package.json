@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5194",
+    "dev:auto": "vite --host 127.0.0.1 --port 5195",
     "build": "vite build"
   },
   "dependencies": {

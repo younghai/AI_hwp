@@ -17,7 +17,13 @@ function validationLabel(validation) {
   return '검증 통과'
 }
 
-export function RecentDocuments({ files, loading }) {
+function previewLabel(preview) {
+  if (!preview) return '미리보기 기록 없음'
+  if (preview.status !== 'ready') return '미리보기 실패 기록'
+  return `미리보기 ${preview.renderedPageCount}/${preview.pageCount || preview.renderedPageCount}페이지`
+}
+
+export function RecentDocuments({ files, loading, onPreview }) {
   return (
     <>
       <p className="section-label">3. 최근 생성 문서</p>
@@ -35,10 +41,16 @@ export function RecentDocuments({ files, loading }) {
                   생성 {formatDateTime(file.createdAt)} · 만료 {formatDateTime(file.expiresAt)}
                 </p>
                 <p className="recent-doc-meta">{validationLabel(file.validation)}</p>
+                <p className="recent-doc-meta">{previewLabel(file.preview)}</p>
               </div>
-              <a className="recent-doc-link" href={file.downloadUrl} download={file.fileName}>
-                다운로드
-              </a>
+              <div className="recent-doc-actions">
+                <button className="recent-doc-link" type="button" onClick={() => onPreview?.(file)}>
+                  미리보기
+                </button>
+                <a className="recent-doc-link" href={file.downloadUrl} download={file.fileName}>
+                  다운로드
+                </a>
+              </div>
             </div>
           ))}
         </div>

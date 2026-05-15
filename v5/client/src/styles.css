@@ -370,6 +370,15 @@ small.helper {
   background: rgba(255, 255, 255, 0.58);
 }
 
+.recent-doc-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .recent-doc-copy {
   min-width: 0;
 }
@@ -390,7 +399,6 @@ small.helper {
 }
 
 .recent-doc-link {
-  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -403,6 +411,7 @@ small.helper {
   font-weight: 700;
   font-size: 0.83rem;
   white-space: nowrap;
+  cursor: pointer;
 }
 
 .primary-button,
@@ -1111,6 +1120,16 @@ small.helper {
   .button-row {
     flex-direction: column;
     align-items: stretch;
+  }
+  .recent-doc-item {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .recent-doc-actions {
+    justify-content: stretch;
+  }
+  .recent-doc-link {
+    flex: 1 1 0;
   }
   .primary-button,
   .secondary-button {

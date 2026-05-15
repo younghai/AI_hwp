@@ -10,7 +10,8 @@ export function useDraft({ setParseStatus }) {
     fileName: '',
     message: '',
     validation: null,
-    diagramReport: null
+    diagramReport: null,
+    fileId: ''
   })
   const draftControllerRef = useRef(null)
   const exportControllerRef = useRef(null)
@@ -22,7 +23,8 @@ export function useDraft({ setParseStatus }) {
       fileName: '',
       message: '',
       validation: null,
-      diagramReport: null
+      diagramReport: null,
+      fileId: ''
     })
   }
 
@@ -95,7 +97,8 @@ export function useDraft({ setParseStatus }) {
       fileName: '',
       message: '',
       validation: null,
-      diagramReport: null
+      diagramReport: null,
+      fileId: ''
     })
 
     try {
@@ -120,6 +123,7 @@ export function useDraft({ setParseStatus }) {
         throw new Error(payload.error || 'HWPX 생성에 실패했습니다.')
       }
       const result = {
+        fileId: payload.fileId || '',
         url: payload.downloadUrl,
         fileName: payload.fileName,
         message: payload.message,

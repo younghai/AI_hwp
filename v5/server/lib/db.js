@@ -53,6 +53,17 @@ db.exec(`
     diagram_report_json TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS generated_previews (
+    file_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    page_count INTEGER NOT NULL,
+    rendered_page_count INTEGER NOT NULL,
+    renderer TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_sessions_expires_at
     ON sessions (expires_at);
 
@@ -64,6 +75,9 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_generated_files_expires_at
     ON generated_files (expires_at);
+
+  CREATE INDEX IF NOT EXISTS idx_generated_previews_updated_at
+    ON generated_previews (updated_at);
 `)
 
 const listExpiredSessionIdsStmt = db.prepare(`
@@ -81,6 +95,11 @@ const listGeneratedFilesToDeleteStmt = db.prepare(`
 
 const deleteGeneratedFileStmt = db.prepare(`
   DELETE FROM generated_files
+  WHERE file_id = ?
+`)
+
+const deleteGeneratedPreviewStmt = db.prepare(`
+  DELETE FROM generated_previews
   WHERE file_id = ?
 `)
 
@@ -104,6 +123,15 @@ const deleteOauthStatesBySidStmt = db.prepare(`
 const deleteGeneratedFilesBySidStmt = db.prepare(`
   DELETE FROM generated_files
   WHERE sid = ?
+`)
+
+const deleteGeneratedPreviewsBySidStmt = db.prepare(`
+  DELETE FROM generated_previews
+  WHERE file_id IN (
+    SELECT file_id
+    FROM generated_files
+    WHERE sid = ?
+  )
 `)
 
 const listGeneratedFilesForSessionStmt = db.prepare(`
@@ -138,6 +166,7 @@ export async function cleanupSessionData(sid) {
       await fs.rm(row.file_path, { force: true }).catch(() => {})
     }
   }
+  deleteGeneratedPreviewsBySidStmt.run(sid)
   deleteGeneratedFilesBySidStmt.run(sid)
   deleteSessionProviderSecretsStmt.run(sid)
   deleteOauthStatesBySidStmt.run(sid)
@@ -155,6 +184,7 @@ export async function cleanupExpiredData(now = Date.now()) {
     if (row?.file_path && existsSync(row.file_path)) {
       await fs.rm(row.file_path, { force: true }).catch(() => {})
     }
+    deleteGeneratedPreviewStmt.run(row.file_id)
     deleteGeneratedFileStmt.run(row.file_id)
   }
 
