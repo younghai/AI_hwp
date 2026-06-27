@@ -101,6 +101,11 @@ npm run dev                                # client(5188) + server(8788)
 
 저장소 커밋 기준 시간순 요약입니다 (최신순).
 
+### 2026-06-27 — 문서 정비
+- **변경 이력(Changelog) 섹션 신규** — v1(2026-04-10)부터 v4(2026-04-26)까지 날짜·버전별 시간순 요약 정리.
+- **v4 기능 표 보강** — 실재하나 README에 누락돼 있던 항목 추가: `ErrorBoundary`, AI 비용/토큰 표시, 다크 모드(`prefers-color-scheme`), Vitest + GitHub Actions CI(`v4-checks.yml`), `v4/Dockerfile`, 샘플 API(`GET /api/samples`).
+- **정확성 수정** — `@rhwp/core` 표기를 실제 코드(`client/package.json`)와 일치하도록 `^0.7.2` → exact pin `0.7.2`(ADR-0001)로 정정.
+
 ### 2026-04-26 — v4 출시 및 안정화
 - **v4 신규**: 검증 UI(`ValidationPanel`) · 샘플 문서 체험(`EmptyState` + `GET /api/samples`) · Toast 알림 · AI 비용/토큰 표시 · GitHub Actions CI(`v4-checks.yml`).
 - **코드 품질**: `ErrorBoundary` 도입(런타임 크래시 복구), `useDraft` AbortController(fetch 경쟁 조건 해결), `LoginOverlay` 접근성(focus trap·Escape·`role=dialog`), 다크 모드(`prefers-color-scheme`), Vitest 테스트 인프라, `v4/Dockerfile`.
