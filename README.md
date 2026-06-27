@@ -101,10 +101,10 @@ npm run dev                                # client(5188) + server(8788)
 
 저장소 커밋 기준 시간순 요약입니다 (최신순).
 
-### 2026-06-27 — 문서 정비
+### 2026-06-27 — rhwp 엔진 업데이트 + 문서 정비
+- **`@rhwp/core` 0.7.2 → 0.7.17 범프** (v2 / v3 / v4 client) — 업스트림 rhwp 누적 수정(수식·표·차트·HWPX 렌더 정합)을 반영. ADR-0001에 따라 exact pin 유지. `npm install` + `vite build` 통과 검증(WASM 번들 정상). 단, 브라우저 런타임(HWPX 파싱/렌더) 동작은 별도 확인 권장.
 - **변경 이력(Changelog) 섹션 신규** — v1(2026-04-10)부터 v4(2026-04-26)까지 날짜·버전별 시간순 요약 정리.
 - **v4 기능 표 보강** — 실재하나 README에 누락돼 있던 항목 추가: `ErrorBoundary`, AI 비용/토큰 표시, 다크 모드(`prefers-color-scheme`), Vitest + GitHub Actions CI(`v4-checks.yml`), `v4/Dockerfile`, 샘플 API(`GET /api/samples`).
-- **정확성 수정** — `@rhwp/core` 표기를 실제 코드(`client/package.json`)와 일치하도록 `^0.7.2` → exact pin `0.7.2`(ADR-0001)로 정정.
 
 ### 2026-04-26 — v4 출시 및 안정화
 - **v4 신규**: 검증 UI(`ValidationPanel`) · 샘플 문서 체험(`EmptyState` + `GET /api/samples`) · Toast 알림 · AI 비용/토큰 표시 · GitHub Actions CI(`v4-checks.yml`).
