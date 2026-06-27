@@ -11,7 +11,7 @@ HWPX 원본 문서를 업로드하면 AI가 내용을 분석하고, 기존 문�
 
 | 버전 | 폴터 | 권장 여부 | 핵심 특징 |
 |------|------|-----------|-----------|
-| **v4** | `v4/` | ✅ **권장** | 샘플 문서 체험, Toast 알림, HWPX 검증, `@rhwp/core ^0.7.2` |
+| **v4** | `v4/` | ✅ **권장** | 샘플 문서 체험, Toast 알림, HWPX 검증, 다크모드, Vitest/CI, Docker |
 | **v3** | `v3/` | 유지보수 모드 | v2의 preview≠download 해결, 자립형 구조, `@rhwp/core` exact pin |
 | **v2** | `v2/` | 레거시 | 초기 모듈 분리 버전 (Google OAuth, 드래그앤드롭, WASM 파싱) |
 | **v1** | `app.js`, `index.html` | 아카이브 | PHP 기반 단일 페이지 데모 |
@@ -64,10 +64,15 @@ npm run dev                                # client(5188) + server(8788)
 
 | 기능 | 설명 |
 |------|------|
-| **샘플 문서 체험** | 업로드 없이 `공문서 기본 양식` 샘플로 즉시 체험 가능 (`EmptyState` 컴포넌트) |
-| **Toast 알림** | 성공/오류/경료 토스트 메시지 (`useToast.js`) |
+| **샘플 문서 체험** | 업로드 없이 `공문서 기본 양식` 샘플로 즉시 체험 가능 (`EmptyState` 컴포넌트 + `GET /api/samples`) |
+| **Toast 알림** | 성공/오류/경고 토스트 메시지 (`useToast.js`) |
 | **HWPX 검증 패널** | 생성된 문서의 규칙/구조/컨테이너/스키마 검증 결과 시각화 (`ValidationPanel`) |
-| **`@rhwp/core` semver** | `^0.7.2` — 패치 업데이트 자동 수용 |
+| **AI 비용 투명성** | 생성마다 소요 시간·토큰 추정·예상 비용(USD) 표시 |
+| **ErrorBoundary** | 런타임 크래시 시 흰 화면 대신 복구 UI (`App.jsx` 래핑) |
+| **다크 모드** | `prefers-color-scheme` 기반 자동 테마 |
+| **테스트 인프라** | Vitest 도입 + GitHub Actions CI(`.github/workflows/v4-checks.yml`) |
+| **Docker 지원** | `v4/Dockerfile` 컨테이너 실행 |
+| **`@rhwp/core`** | ADR-0001 준수 exact pin (재현성 보장) |
 | **`setup-rhwp-symlink.sh`** | `postinstall`로 `@rhwp/core` WASM 파일 자동 연결 |
 
 ### v3 (vs v2)
@@ -89,6 +94,36 @@ npm run dev                                # client(5188) + server(8788)
 - 멀티 AI 프로바이더 (Anthropic / OpenAI / Kimi / xAI)
 - 드래그앤드롭 업로드 + 파일 해제
 - SVG 다이어그램 자동 생성 + HWPX 내 PNG 삽입
+
+---
+
+## 📜 변경 이력 (Changelog)
+
+저장소 커밋 기준 시간순 요약입니다 (최신순).
+
+### 2026-04-26 — v4 출시 및 안정화
+- **v4 신규**: 검증 UI(`ValidationPanel`) · 샘플 문서 체험(`EmptyState` + `GET /api/samples`) · Toast 알림 · AI 비용/토큰 표시 · GitHub Actions CI(`v4-checks.yml`).
+- **코드 품질**: `ErrorBoundary` 도입(런타임 크래시 복구), `useDraft` AbortController(fetch 경쟁 조건 해결), `LoginOverlay` 접근성(focus trap·Escape·`role=dialog`), 다크 모드(`prefers-color-scheme`), Vitest 테스트 인프라, `v4/Dockerfile`.
+- **버전 식별자 정정**: v4 문서/코드에 남아 있던 v2·v3 잔재 정리, `@rhwp/core` exact pin(`0.7.2`) 복원(ADR-0001 준수).
+- **다이어그램 HWPX 삽입 수정**: Homebrew Python venv 우선 적용으로 `cairosvg`/`libcairo` 로딩 문제 해결, `render_diagram()`이 `steps`/`items`/`rows` 키 인식, `cairosvg`를 `requirements.txt`에 추가.
+- **문서**: 루트 README에 v2/v3/v4 통합 가이드 반영, 폭포수 문서를 v3/v4로 분리.
+
+### 2026-04-25 — v3 검증 계층
+- 검증 레이어 + 골든 테스트 + polaris_dvc 연동 + docType별 스펙 프레임워크.
+
+### 2026-04-22 — v3 출시 (자립형)
+- preview≠download 바이트 불일치 해결, P0~P2 개선(미커버 body 자동 비우기, 프롬프트 강화, 네임스페이스 정정, `clone_form.py`), `scripts/`·`templates/` 내부화.
+
+### 2026-04-21 — 인증 시스템
+- Google OAuth 로그인/로그아웃, client_id 미설정 시 Mock 폴백, 별도 포트 자동 로그인 오버레이, `/auth` 프록시·팝업 폴백. 폭포수 문서 v1.2/v1.3 갱신.
+
+### 2026-04-20 — v2 모듈화
+- v2를 client/server/shared 모듈 구조로 리팩터링 + self-learning 인프라(lessons-learned, skills, hooks). Anthropic 기본 모델 `claude-opus-4-7` 업그레이드. v2 AI 문서 스튜디오 + 다이어그램 렌더링.
+
+### 2026-04-10 — 최초 공개
+- 자립형 AI HWPX 데모 공개, HWPX 패키지 구조 문서화, 한국어 서비스 소개 랜딩.
+
+> 버전별 기능 비교는 위 [버전별 주요 변경사항](#-버전별-주요-변경사항)을, 상세 변경은 `docs/v2-update.md`와 각 버전의 `CLAUDE.md`(실수 이력)를 참고하세요.
 
 ---
 
