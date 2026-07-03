@@ -69,6 +69,32 @@ function createWorkDir() {
   return fs.mkdtemp(path.join(tempRootDir, 'build-'))
 }
 
+// Map build_hwpx.py's structured stdout error (see its _emit_error) to a
+// user-safe message + HTTP status. Falls back to a generic message so raw
+// tracebacks never reach the client (CLAUDE.md R4).
+const WORKER_ERROR_STATUS = {
+  TEMPLATE_NOT_FOUND: 422,
+  SECTIONS_PARSE_ERROR: 422,
+  BUILD_FAILED: 500
+}
+
+function parseWorkerError(stdout) {
+  const line = String(stdout || '')
+    .split('\n')
+    .find((l) => l.startsWith('HWPX_BUILD_ERROR '))
+  if (line) {
+    try {
+      const parsed = JSON.parse(line.slice('HWPX_BUILD_ERROR '.length))
+      if (parsed && typeof parsed.message === 'string') {
+        return { message: parsed.message, status: WORKER_ERROR_STATUS[parsed.error_code] || 500 }
+      }
+    } catch {
+      /* fall through to generic */
+    }
+  }
+  return { message: 'HWPX 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.', status: 500 }
+}
+
 async function moveFileSafe(sourcePath, targetPath) {
   try {
     await fs.rename(sourcePath, targetPath)
@@ -311,10 +337,20 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
   if (templatePath) args.push('--template-file', templatePath)
   if (sectionsJsonPath) args.push('--sections-json', sectionsJsonPath)
 
+  // macOS: Homebrew의 libcairo 는 dyld 기본 검색 경로 밖에 있어
+  // cairosvg(다이어그램 PNG 변환)가 못 찾는다 → fallback 경로 주입
+  const pythonEnv = process.platform === 'darwin'
+    ? {
+        DYLD_FALLBACK_LIBRARY_PATH: ['/opt/homebrew/lib', '/usr/local/lib', process.env.DYLD_FALLBACK_LIBRARY_PATH]
+          .filter(Boolean)
+          .join(':')
+      }
+    : undefined
+
   let result
   let diagramReport = null
   try {
-    result = await runProcess(pythonCmd, args, v4Root)
+    result = await runProcess(pythonCmd, args, v4Root, { env: pythonEnv })
     try {
       const reportRaw = await fs.readFile(reportJsonPath, 'utf-8')
       diagramReport = JSON.parse(reportRaw)
@@ -332,7 +368,11 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
 
   if (!result.ok) {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {})
-    throw createHttpError(result.stderr || 'HWPX 생성에 실패했습니다.', 500)
+    // Never surface raw stderr/traceback to the user (CLAUDE.md R4). The full
+    // stderr is preserved in server logs for debugging.
+    if (result.stderr) console.error('[hwpxBuilder] build_hwpx worker failed:', result.stderr)
+    const { message, status } = parseWorkerError(result.stdout)
+    throw createHttpError(message, status)
   }
 
   // v4: 생성된 HWPX 에 대해 native + polaris 검증 실행.
