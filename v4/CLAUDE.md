@@ -1,6 +1,8 @@
-# v4 — AI Document Studio (HWP/HWPX Automation)
+# AI HWP — AI Document Studio (HWP/HWPX Automation)
 
-**Read this file every time before working on v4. It encodes every mistake we've already made so you don't repeat them.**
+**Read this file every time before working on this repo. It encodes every mistake we've already made so you don't repeat them.**
+
+> v4는 AI_hwp 레포 내에서 완전히 자립형이다 (외부 경로 의존 0). 패키지 매니저는 **npm workspaces** (`client`, `server`). 별도의 독립 실행형 사본이 필요하면 `v4/`를 통째로 복사해도 그대로 동작한다.
 
 ---
 
@@ -57,12 +59,17 @@
 - 한글 파일명은 `decodeOriginalName` 으로 UTF-8 복원
 - **실수 이력**: `generated/1776581...-áá¢áá£...hwpx` 같은 깨진 파일명 다수 발생
 
+### R9. 사용자 텍스트가 여러 진입점으로 들어오면 **모든 진입점에서 동일하게 NFC 정규화**, 외부 서빙 파일은 **tmp write + atomic rename**
+- CLI 인자만 정규화하고 JSON 파일 경로는 빠뜨리면 macOS(NFD)에서 매칭 실패 → 본문 소실
+- `pack_hwpx` 처럼 최종 산출물에 직접 쓰지 말고 tmp에 쓴 뒤 `os.replace()` — 타임아웃/크래시 시 손상 파일이 서빙되는 것을 방지
+- **실수 이력**: `load_sections_body`가 NFC 정규화를 빠뜨려 NFD 헤딩의 AI 본문이 빈 섹션으로 렌더됨
+
 ---
 
 ## 🏗 아키텍처 (ADRs: `docs/adr/`)
 
 ```
-v4/
+.
 ├── shared/              # client + server 공용 유틸 (escape, validate, docTypes)
 ├── server/
 │   ├── lib/             # 순수 유틸 (errors, env, oauth, upload, providers-config, session)
@@ -77,8 +84,8 @@ v4/
 │   │   └── components/  # 프레젠테이션 (TopBar, ProviderSettings, ControlPanel,
 │   │                       PreviewPanel, EmptyState, Toast, ValidationPanel)
 │   └── vite.config.js   # fs.allow=['..'] (workspace 부모 공유 접근)
-├── scripts/build_hwpx.py  # Python 워커. Node가 spawn 으로 호출 (v4 자체 보유)
-└── templates/              # HWPX 템플릿 + 샘플 문서 (v4 자체 보유)
+├── scripts/build_hwpx.py  # Python 워커. Node가 spawn 으로 호출 (repo 내장)
+└── templates/              # HWPX 템플릿 + 샘플 문서 (repo 내장)
 ```
 
 **금기**:
@@ -92,12 +99,16 @@ v4/
 
 | 목적 | 명령 |
 |------|------|
-| dev 서버 시작 (server+client 병행) | `cd v4 && npm run dev` |
-| 클라이언트 프로덕션 빌드 | `cd v4/client && npm run build` |
-| 서버 syntax 체크 | `cd v4/server && for f in index.js lib/*.js services/*.js routes/*.js; do node --check "$f"; done` |
+| dev 서버 시작 (server+client 병행) | `npm run dev` |
+| 클라이언트 프로덕션 빌드 | `npm run build --workspace client` |
+| 서버 syntax 체크 | `cd server && for f in index.js lib/*.js services/*.js routes/*.js; do node --check "$f"; done` |
 | Python 스크립트 syntax | `python3 -m py_compile scripts/build_hwpx.py` |
-| **E2E smoke test** | `bash v4/tools/smoke-test.sh` |
-| **HWPX 내용 검증** | `python3 v4/tools/verify-hwpx-markers.py <file> MARKER1 MARKER2` |
+| **서버 단위 테스트** | `npm test --workspace server` |
+| **클라이언트 단위 테스트 + lint** | `npm test --workspace client && npm run lint --workspace client` |
+| **Python 회귀 스위트** | `python3 -m pytest scripts/tests -q` |
+| **E2E smoke test** | `bash tools/smoke-test.sh` |
+| **HWPX 내용 검증** | `python3 tools/verify-hwpx-markers.py <file> MARKER1 MARKER2` |
+| **완료 선언 전 필수** | `bash hooks/pre-completion-checklist.sh` |
 
 ---
 

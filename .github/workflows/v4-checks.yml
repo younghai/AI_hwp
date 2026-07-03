@@ -33,6 +33,9 @@ jobs:
           cd v4
           npm install
 
+      - name: Install Python dev dependencies
+        run: pip install -r v4/requirements-dev.txt
+
       - name: Python syntax check (build_hwpx, validators)
         run: |
           cd v4
@@ -42,6 +45,9 @@ jobs:
           python3 -m py_compile scripts/validators/container.py
           python3 -m py_compile scripts/validators/structure.py
           python3 -m py_compile scripts/validators/validate.py
+
+      - name: Python regression suite (pytest — R5/R6/NFC/escape/zip-bomb/XXE)
+        run: python3 -m pytest v4/scripts/tests -q
 
       - name: Server module syntax check
         run: |
@@ -57,15 +63,27 @@ jobs:
             node --check "$f"
           done
 
+      - name: Client lint (catches undefined refs)
+        run: |
+          cd v4/client
+          npm run lint
+
       - name: Client production build
         run: |
           cd v4/client
           npm run build
 
-      - name: Run unit tests
+      - name: Run client unit tests
         run: |
           cd v4/client
           npm test
+
+      - name: Run server unit tests
+        run: |
+          cd v4/server
+          npm test
+        env:
+          NODE_ENV: test
 
       - name: Start dev server (background)
         run: |

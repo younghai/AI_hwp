@@ -8,6 +8,110 @@
 
 ---
 
+## 2026-07-02 — 다이어그램에 `&`/`<` 하나만 있어도 조용히 소실
+
+### What happened
+- 본문에 "R&D" 처럼 `&`, `<`, `"` 가 포함된 텍스트로 다이어그램을 생성하면 미리보기(JS)엔 보이는데 다운로드 HWPX엔 다이어그램이 없음
+
+### Why
+- `scripts/diagram_templates.py` 가 title/step/label 등을 f-string으로 SVG에 **미이스케이프** 삽입 → malformed SVG → `cairosvg.svg2png` 예외 → `except Exception: continue` 로 조용히 스킵
+- `shared/escape.js` 의 `escapeXml` 은 클라이언트 미리보기 SVG에만 적용되고 Python 경로엔 대응 함수가 없었음 (R7이 있었지만 Python 쪽은 놓침)
+
+### Fix
+- `diagram_templates.py`에 `_esc()` (xml.sax.saxutils.escape 기반) 추가, title/step/label/date/a/b/header_* 전부 경유
+
+### Prevention
+- `CLAUDE.md` **R7**을 "JS/Python 양쪽 다이어그램 경로 모두" 로 명시 강화
+- `scripts/tests/test_pipeline.py` — `R&D`, `<b>`, `"` 포함 텍스트로 well-formed SVG 검증 (3케이스)
+
+---
+
+## 2026-07-02 — macOS(NFD)에서 AI 본문이 빈 섹션으로 생성됨
+
+### What happened
+- 섹션 JSON의 한글 헤딩이 NFD(분해형)이면 NFC로 정규화된 toc와 매칭 실패 → 해당 섹션 body가 통째로 빈 문자열로 클리어됨
+
+### Why
+- `main()`은 `--title`/`--toc`/`--source-document`만 NFC 정규화하고, `load_sections_body()`는 JSON의 heading/body를 원본 그대로 사용
+
+### Fix
+- `load_sections_body`에서 heading/body를 로드 직후 `unicodedata.normalize('NFC', ...)`
+
+### Prevention
+- 사용자 텍스트가 여러 진입점(CLI 인자, JSON 파일)으로 들어오는 파이프라인은 **모든 진입점에서 동일하게 정규화**
+- `scripts/tests/test_pipeline.py` — NFD 헤딩 → NFC 매핑 성공 검증
+
+---
+
+## 2026-07-03 — 빌드 타임아웃/크래시 시 손상된 .hwpx가 다운로드 경로에 잔존
+
+### What happened
+- 60초 타임아웃으로 강제 종료되거나 예외 발생 시, 부분적으로 쓰인 zip이 `generated/`에 그대로 남아 서빙될 수 있었음
+
+### Why
+- `pack_hwpx`가 최종 출력 경로에 **직접** `ZipFile(output_file, "w")` 로 씀 (원자성 없음)
+
+### Fix
+- tmp 파일(`.{name}.{pid}.tmp`)에 쓴 뒤 `os.replace()`로 원자적 교체. 실패 시 tmp 정리
+- Node 측(`hwpxBuilder.js`)도 빌드 실패 시 `outputPath`를 명시적으로 unlink
+
+### Prevention
+- 외부에 서빙되는 파일을 생성하는 모든 경로는 **tmp write + atomic rename** 패턴 강제
+
+---
+
+## 2026-07-03 — Python traceback + 서버 절대경로가 사용자 응답에 그대로 노출 (R4 재발)
+
+### What happened
+- 손상된 업로드/입력으로 예외 발생 시 stderr의 전체 traceback(서버 파일시스템 절대경로 포함)이 500 에러 메시지로 그대로 API 응답에 실림
+
+### Why
+- `main()`에 최종 예외 핸들러가 없어 미처리 예외가 stderr로 나가고, Node의 `hwpxBuilder.js`가 `result.stderr`를 그대로 `createHttpError`에 전달
+
+### Fix
+- `main()`을 try/except로 감싸고 `HWPX_BUILD_ERROR {json}` 을 stdout으로 출력 (error_code + 사용자 메시지만, traceback은 stderr로만)
+- Node가 `HWPX_BUILD_ERROR` 라인을 파싱해 사용자 메시지 매핑, stderr는 서버 로그에만 기록
+
+### Prevention
+- `CLAUDE.md` **R4**에 "구조화 에러 채널(stdout JSON) vs 진단 로그(stderr)를 항상 분리" 명시
+- Python↔Node 경계를 넘는 모든 신규 워커는 이 패턴을 기본값으로
+
+---
+
+## 2026-07-03 — 다크모드에서 설정 모달을 읽을 수 없음 (대비 1.2:1)
+
+### What happened
+- macOS 다크모드에서 "AI 연결 관리" 모달의 제목·프로바이더명이 거의 안 보임 (실측 대비 1.2:1, WCAG AA 기준 4.5:1)
+
+### Why
+- `.modal-content`, `.toast`, `.parsed-text-panel` 등 8곳 이상이 `#fff`/라이트 rgba를 하드코딩. `:root`는 다크 변수를 선언했지만 컴포넌트 CSS가 토큰을 안 씀
+
+### Fix
+- `--surface`/`--surface-sunken`/`--surface-stage`/`--paper` 시맨틱 토큰 도입, 다크 값 정의. 문서 렌더 영역(`--paper`)만 양쪽 테마에서 흰색 유지
+
+### Prevention
+- 새 컴포넌트 배경/텍스트 색은 **hex/rgba 직접 지정 금지, 토큰만 사용**
+- 다크모드 대비는 `preview_inspect`로 실측 후 커밋 (스크린샷만으론 판단 금지)
+
+---
+
+## 2026-07-03 — useProviders 무한 fetch 루프 (rate limiter 도입 후 발견)
+
+### What happened
+- rate limiting 도입 직후 `/api/health`까지 429가 뜸 — 알고 보니 `/api/providers`가 초당 수십 회 호출되고 있었음
+
+### Why
+- `useProviders(onError)`가 매 렌더마다 새 인라인 `onError`를 받음 → `refresh`(useCallback dep: `[onError]`)가 매번 재생성 → `useEffect(refresh, [refresh])` mount 이펙트가 계속 재실행 → `setProviders` → 재렌더 → 무한 루프
+
+### Fix
+- `onError`를 `useRef`로 안정화, `refresh`의 dep을 `[]`로 고정
+
+### Prevention
+- `useCallback`/`useEffect` dep에 **부모가 매번 새로 만드는 인라인 함수**를 직접 넣지 않는다 (ref로 감싸거나 부모에서 안정화)
+- rate limit/메트릭 도입은 이런 종류의 숨은 루프를 드러내는 좋은 회귀 테스트이기도 하다
+
+---
+
 ## 2026-04-26 — v4 문서에 v2/v3 버전 식별자 잔여
 
 ### What happened

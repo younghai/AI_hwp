@@ -5,23 +5,23 @@
 # 실패 항목이 있으면 사용자에게 완료라고 말하지 말 것.
 #
 # Usage:
-#   bash v4/hooks/pre-completion-checklist.sh
+#   bash hooks/pre-completion-checklist.sh
 #
 # Exit 0 = 완료 선언해도 OK
 # Exit 1 = 회귀/누락 있음 — 사용자에게 실패 보고
 #
-# v3 는 자립형: 모든 경로가 v4/ 내부로 해결된다.
+# 자립형: 모든 경로가 repo 루트 내부로 해결된다.
 
 set -e
-V3_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$V3_ROOT"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$REPO_ROOT"
 
 pass() { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; FAILED=1; }
 
 FAILED=0
 
-echo "=== Python syntax (v4/scripts) ==="
+echo "=== Python syntax (scripts/) ==="
 if python3 -m py_compile scripts/build_hwpx.py 2>/dev/null; then
   pass "scripts/build_hwpx.py"
 else
@@ -36,6 +36,20 @@ for opt in scripts/clone_form.py scripts/fix_namespaces.py; do
     fi
   fi
 done
+
+echo ""
+echo "=== Python regression suite (pytest) ==="
+if [ -d "$REPO_ROOT/.venv" ]; then
+  PYTEST_BIN="$REPO_ROOT/.venv/bin/python3 -m pytest"
+else
+  PYTEST_BIN="python3 -m pytest"
+fi
+if $PYTEST_BIN scripts/tests -q > /tmp/ai-hwp-pytest.log 2>&1; then
+  pass "$(tail -1 /tmp/ai-hwp-pytest.log)"
+else
+  fail "pytest 실패 — 로그: /tmp/ai-hwp-pytest.log"
+  tail -20 /tmp/ai-hwp-pytest.log | sed 's/^/      /'
+fi
 
 echo ""
 echo "=== Server module syntax ==="
@@ -60,6 +74,15 @@ for f in shared/*.js; do
 done
 
 echo ""
+echo "=== Server unit tests (vitest) ==="
+if (cd server && NODE_ENV=test npm test) > /tmp/ai-hwp-server-test.log 2>&1; then
+  pass "$(grep -oE 'Tests +[0-9]+ passed' /tmp/ai-hwp-server-test.log | tail -1)"
+else
+  fail "server vitest 실패 — 로그: /tmp/ai-hwp-server-test.log"
+  tail -15 /tmp/ai-hwp-server-test.log | sed 's/^/      /'
+fi
+
+echo ""
 echo "=== Client production build ==="
 if (cd client && npm run build 2>&1 | tail -5 | grep -q 'built in'); then
   pass "vite build"
@@ -73,14 +96,14 @@ if lsof -nP -i:5192 -i:8792 2>/dev/null | grep -q LISTEN; then
   pass "server 포트 listening"
   echo ""
   echo "=== E2E smoke test (API → HWPX → markers) ==="
-  if bash "$V3_ROOT/tools/smoke-test.sh" > /tmp/v3-smoke.log 2>&1; then
+  if bash "$REPO_ROOT/tools/smoke-test.sh" > /tmp/ai-hwp-smoke.log 2>&1; then
     pass "smoke-test.sh PASS"
   else
-    fail "smoke-test.sh FAIL — 자세한 로그: /tmp/v3-smoke.log"
-    tail -20 /tmp/v3-smoke.log | sed 's/^/      /'
+    fail "smoke-test.sh FAIL — 자세한 로그: /tmp/ai-hwp-smoke.log"
+    tail -20 /tmp/ai-hwp-smoke.log | sed 's/^/      /'
   fi
 else
-  fail "dev 서버가 꺼져 있음 — E2E 생략. 'cd v3 && npm run dev' 후 재실행."
+  fail "dev 서버가 꺼져 있음 — E2E 생략. 'npm run dev' 후 재실행."
 fi
 
 echo ""

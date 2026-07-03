@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Smoke-test the v3 stack end-to-end.
+# Smoke-test the AI HWP stack end-to-end.
 #
-# Pre-reqs: dev server must be running (`cd v3 && npm run dev`).
+# Pre-reqs: dev server must be running (`npm run dev`).
 # Exits 0 if every critical path works, non-zero otherwise.
 #
 # Why this exists:

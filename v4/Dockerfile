@@ -10,6 +10,9 @@ COPY client/package.json client/
 COPY server/package.json server/
 RUN npm install
 
+COPY requirements.txt ./
+RUN pip3 install --break-system-packages -r requirements.txt
+
 COPY . .
 
 ENV PORT=8792

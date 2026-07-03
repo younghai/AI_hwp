@@ -1,19 +1,41 @@
-import { DOC_TYPES, buildToc, deriveTitle, labelForDocType } from '../../../shared/docTypes.js'
+import { DOC_TYPES, buildToc, deriveTitle, labelForDocType, getDocTypeMeta } from '../../../shared/docTypes.js'
 
-export { DOC_TYPES, buildToc, deriveTitle, labelForDocType }
+export { DOC_TYPES, buildToc, deriveTitle, labelForDocType, getDocTypeMeta }
 
 export function extractTextFromSvg(svg) {
   const parser = new DOMParser()
   const doc = parser.parseFromString(svg, 'image/svg+xml')
   const nodes = Array.from(doc.querySelectorAll('text, tspan'))
-  const lines = nodes
-    .map((node) => node.textContent?.trim() || '')
-    .filter(Boolean)
-    .filter((value, index, array) => array.indexOf(value) === index)
+  // Drop only *adjacent* duplicates (overlapping text/tspan rendering the same
+  // string). Global dedup used to erase legitimately repeated content such as
+  // table header rows across the document. See review PO-02.
+  const lines = []
+  for (const node of nodes) {
+    const value = node.textContent?.trim() || ''
+    if (!value) continue
+    if (lines.length > 0 && lines[lines.length - 1] === value) continue
+    lines.push(value)
+  }
   return lines.join('\n')
 }
 
-export function buildOptimisticDraft({ sourceInsight, docType, companyName, goal, notes, targetTitle }) {
+// Estimate how many body slots the uploaded template exposes, so the AI can be
+// asked to produce that many sections (activates the server's templateBodySlots
+// prompt path — review PO-03). Counts clearly-marked heading lines; returns 0
+// when the structure is ambiguous so the server falls back to generic guidance.
+export function estimateTemplateSlots(extractedText) {
+  if (!extractedText) return 0
+  // Note: \b word boundaries don't work after Hangul (not \w), so avoid them.
+  const headingRe = /^(\d+[.)]|[가-힣][.)]|제?\s?\d+\s?(장|조|절|항)|[□■◦○▪▶]|[IVX]+[.)])\s*\S/
+  const count = extractedText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => headingRe.test(line))
+    .length
+  return count >= 3 && count <= 20 ? count : 0
+}
+
+export function buildOptimisticDraft({ sourceInsight, docType, companyName, targetTitle }) {
   const lines = String(sourceInsight.extractedText || '')
     .split('\n')
     .map((line) => line.trim())
@@ -24,19 +46,15 @@ export function buildOptimisticDraft({ sourceInsight, docType, companyName, goal
   const inferredTitle = targetTitle
     || (sourceInsight.fileName ? sourceInsight.fileName.replace(/\.(hwp|hwpx)$/i, '') : '문서 초안')
 
+  // Bodies are intentionally empty — the editor renders a skeleton for the
+  // optimistic draft instead of fabricated sentences that could be mistaken for
+  // real AI output (review UX-05). Headings come from the doc-type TOC so the
+  // structure is visible immediately.
   return {
     title: inferredTitle,
-    summary: `${companyName} 기준으로 업로드 문서 내용을 정리해 ${labelForDocType(docType)} 초안을 생성하는 중입니다.`,
+    summary: `${companyName} 기준으로 ${labelForDocType(docType)} 초안을 생성하는 중입니다…`,
     toc,
-    sections: toc.map((heading, index) => ({
-      heading,
-      body: [
-        excerpt[index] ? `원문 핵심 문장 "${excerpt[index]}"을 바탕으로 ${heading} 내용을 정리합니다.` : `${heading} 내용을 원문 흐름에 맞게 재구성합니다.`,
-        goal ? `생성 요청은 "${goal}" 입니다.` : '',
-        notes ? `추가 메모 "${notes}"를 반영합니다.` : '',
-        `${inferredTitle} 문서의 ${heading} 섹션 초안을 준비하고 있습니다.`
-      ].filter(Boolean).join(' ')
-    })),
+    sections: toc.map((heading) => ({ heading, body: '' })),
     sourceExcerpt: excerpt,
     engine: 'optimistic-preview'
   }

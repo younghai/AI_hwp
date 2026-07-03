@@ -10,6 +10,14 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 
+# Parse untrusted template XML with defusedxml to block entity-expansion (billion
+# laughs) / external-entity attacks. Serialization still uses the standard ET.
+# Falls back to stdlib ET if defusedxml is unavailable (review PY-07).
+try:
+    from defusedxml.ElementTree import parse as _safe_parse
+except ImportError:
+    _safe_parse = ET.parse
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 OFFICE_DIR = SCRIPT_DIR / "office"
 REPO_ROOT = SCRIPT_DIR.parent
@@ -70,18 +78,6 @@ TEMPLATES = {
     }
 }
 
-# 섹션 본문 자동 생성 문장 풀
-_BODY_SENTENCES = [
-    "{section}의 추진 배경과 필요성을 원본 서식에 맞게 기술합니다.",
-    "{title}의 기대 효과와 주요 성과 지표를 한 페이지로 요약합니다.",
-    "{section} 관련 현황 분석 및 주요 시사점을 정리합니다.",
-    "{section} 실행을 위한 세부 추진 방안을 단계별로 기술합니다.",
-    "원본 문서 스타일을 유지하며 {section} 핵심 내용을 작성합니다.",
-    "{section} 추진 시 고려할 주요 조건과 평가 기준을 명시합니다.",
-    "{section} 완료 후 후속 조치 및 점검 항목을 기술합니다.",
-    "{section}의 담당 부서와 협력 기관의 역할을 정의합니다.",
-]
-
 # 레벨1 헤딩을 나타내는 스타일 이름 패턴 (소문자 비교)
 _HEADING1_PATTERNS = [
     "레벨1", "level 1", "level1", "heading 1", "heading1",
@@ -98,6 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--toc", help="Pipe-separated or newline-separated table of contents")
     parser.add_argument("--source-document", default="document.hwpx", help="Name of the source document")
     parser.add_argument("--sections-json", help="JSON file with AI-generated sections [{heading, body}, ...]")
+    parser.add_argument("--doc-date", help="Document date (YYYY.MM.DD). Defaults to today; pass a fixed value for deterministic output/tests.")
     return parser.parse_args()
 
 
@@ -118,7 +115,7 @@ def detect_heading_style_ids(header_xml: Path) -> frozenset[str]:
     """header.xml 의 스타일 이름을 분석해 섹션 헤딩에 해당하는 styleIDRef 집합을 반환합니다.
     인식 불가 시 {'1'} 을 기본값으로 반환합니다."""
     try:
-        tree = ET.parse(header_xml)
+        tree = _safe_parse(header_xml)
         root = tree.getroot()
         ids: set[str] = set()
         for style in root.findall(f".//{{{HH}}}style"):
@@ -238,6 +235,7 @@ def apply_smart_replacements(
     toc: list[str],
     source_document: str,
     sections_body: dict[str, str] | None = None,
+    doc_date: str | None = None,
 ) -> None:
     """Two-pass replacement that maps AI-generated content to template
     sections by INDEX (not name lookup), then normalizes each paragraph
@@ -246,9 +244,10 @@ def apply_smart_replacements(
     section_path = working_dir / "Contents" / "section0.xml"
 
     heading_ids = detect_heading_style_ids(header_path)
-    now_label = datetime.now().strftime("%Y.%m.%d")
+    # Deterministic when --doc-date is supplied; otherwise today (review PY-P2).
+    now_label = doc_date or datetime.now().strftime("%Y.%m.%d")
 
-    tree = ET.parse(section_path)
+    tree = _safe_parse(section_path)
     root = tree.getroot()
 
     # Build parent map for paragraph insertion later
@@ -374,7 +373,7 @@ def update_preview(preview_path: Path, title: str, toc: list[str], source_docume
 
 
 def update_metadata(content_hpf: Path, title: str) -> None:
-    tree = ET.parse(content_hpf)
+    tree = _safe_parse(content_hpf)
     root = tree.getroot()
     title_node = root.find(".//opf:title", NAMESPACES)
     if title_node is not None:
@@ -409,13 +408,13 @@ def embed_diagrams(
     bin_dir      = working_dir / "BinData"
     bin_dir.mkdir(exist_ok=True)
 
-    tree = ET.parse(section_path)
+    tree = _safe_parse(section_path)
     root = tree.getroot()
 
     # Collect all paragraphs in document order
     all_paras = list(root.iter(f"{{{HP}}}p"))
 
-    hpf_tree = ET.parse(content_hpf)
+    hpf_tree = _safe_parse(content_hpf)
     hpf_root = hpf_tree.getroot()
     manifest_ns = "http://www.idpf.org/2007/opf/"
 
@@ -527,21 +526,45 @@ def embed_diagrams(
     hpf_tree.write(content_hpf, encoding="utf-8", xml_declaration=True)
 
 
+class SectionsParseError(Exception):
+    """Raised when a sections JSON file was provided but could not be parsed.
+
+    Distinct from "no file provided" so the caller can surface a real failure
+    instead of silently generating a document with empty bodies.
+    """
+
+
 def load_sections_body(json_path: str | None) -> tuple[dict[str, str] | None, list[dict]]:
-    """Returns (sections_body_dict, diagrams_list)."""
+    """Returns (sections_body_dict, diagrams_list).
+
+    Headings and bodies are NFC-normalized so lookups against the NFC-normalized
+    TOC (see main()) succeed even when the source JSON carries NFD text — which
+    happens on macOS, where filenames and pasted text are NFD by default. Without
+    this, an NFD heading would fail the toc[i] lookup and the section body would
+    be cleared to empty. See CLAUDE.md R6 / review PY-02.
+    """
     if not json_path:
         return None, []
     try:
         data = json.loads(Path(json_path).read_text(encoding="utf-8"))
-        sections = {s["heading"]: s["body"] for s in data if "heading" in s and "body" in s}
-        diagrams = [d for d in data if d.get("_diagram") is True]
-        return sections, diagrams
-    except Exception as exc:
-        logging.warning("load_sections_body failed: %s", exc)
-        return None, []
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SectionsParseError(f"sections JSON을 읽을 수 없습니다: {exc}") from exc
+    if not isinstance(data, list):
+        raise SectionsParseError("sections JSON 최상위가 배열이 아닙니다.")
+    sections = {
+        unicodedata.normalize("NFC", s["heading"]): unicodedata.normalize("NFC", s["body"])
+        for s in data
+        if isinstance(s, dict) and "heading" in s and "body" in s
+    }
+    diagrams = [d for d in data if isinstance(d, dict) and d.get("_diagram") is True]
+    return sections, diagrams
 
 
-def main() -> None:
+class TemplateNotFoundError(Exception):
+    """Raised when the requested template file does not exist."""
+
+
+def run() -> Path:
     args = parse_args()
     template = TEMPLATES[args.template]
     template_path = Path(args.template_file).expanduser().resolve() if args.template_file else template["path"]
@@ -553,13 +576,14 @@ def main() -> None:
     sections_body, diagrams = load_sections_body(args.sections_json)
 
     if not template_path.exists():
-        raise SystemExit(f"Template file not found: {template_path}")
+        # Surface only the basename — never leak absolute server paths to users.
+        raise TemplateNotFoundError(f"템플릿 파일을 찾을 수 없습니다: {template_path.name}")
 
     with tempfile.TemporaryDirectory(prefix="hwpx-build-") as temp_dir:
         working_dir = Path(temp_dir)
         unpack_hwpx(template_path, working_dir)
 
-        apply_smart_replacements(working_dir, title, toc, source_document, sections_body)
+        apply_smart_replacements(working_dir, title, toc, source_document, sections_body, doc_date=args.doc_date)
         if diagrams:
             embed_diagrams(working_dir, diagrams)
         update_preview(working_dir / "Preview" / "PrvText.txt", title, toc, source_document)
@@ -575,6 +599,34 @@ def main() -> None:
         except Exception as exc:
             logging.warning("fix_hwpx_namespaces 실패 — 계속 진행: %s", exc)
 
+    return output
+
+
+def _emit_error(code: str, message: str) -> None:
+    """Emit a structured, user-safe error on stdout for the Node caller to parse.
+
+    The full traceback stays on stderr for server logs; the user-facing channel
+    (this JSON line) never contains tracebacks or absolute paths. See CLAUDE.md
+    R4 / review PY-04. Node matches the `HWPX_BUILD_ERROR ` sentinel.
+    """
+    payload = json.dumps({"error_code": code, "message": message}, ensure_ascii=False)
+    print(f"HWPX_BUILD_ERROR {payload}")
+
+
+def main() -> None:
+    try:
+        output = run()
+    except TemplateNotFoundError as exc:
+        _emit_error("TEMPLATE_NOT_FOUND", str(exc))
+        sys.exit(2)
+    except SectionsParseError as exc:
+        _emit_error("SECTIONS_PARSE_ERROR", str(exc))
+        sys.exit(2)
+    except Exception:
+        # Full traceback to stderr (server logs only); generic message to user.
+        logging.getLogger("build_hwpx").exception("HWPX build failed")
+        _emit_error("BUILD_FAILED", "문서 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+        sys.exit(1)
     print(f"Built {output}")
 
 

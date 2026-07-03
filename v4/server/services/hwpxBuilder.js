@@ -1,11 +1,14 @@
 import fs from 'fs/promises'
 import { existsSync } from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { fileURLToPath } from 'url'
 import { createHttpError } from '../lib/errors.js'
-import { runProcess, slugify, sanitizeName } from '../lib/utils.js'
+import { runProcess, slugify } from '../lib/utils.js'
 import { decodeOriginalName, assertValidUpload } from '../lib/upload.js'
 import { validateHwpx } from './validator.js'
+import { logger } from '../lib/logger.js'
+import { record } from '../lib/metrics.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,13 +16,43 @@ const v4Root = path.resolve(__dirname, '..', '..')
 const scriptsDir = path.join(v4Root, 'scripts')
 const buildScript = path.join(scriptsDir, 'build_hwpx.py')
 const generatedDir = path.join(v4Root, 'generated')
+// Private work dir (NOT served) for uploaded originals + sections JSON, so they
+// are never exposed via /generated and can't collide across concurrent requests.
+const workDir = path.join(v4Root, '.work')
 
 const venvPython = path.join(v4Root, '.venv', 'bin', 'python3')
 const pythonCmd = existsSync(venvPython) ? venvPython : 'python3'
 
 await fs.mkdir(generatedDir, { recursive: true })
+await fs.mkdir(workDir, { recursive: true })
 
 export const generatedDirectory = generatedDir
+
+// Map build_hwpx.py's structured stdout error (see its _emit_error) to a
+// user-safe message + HTTP status. Falls back to a generic message so raw
+// tracebacks never reach the client (CLAUDE.md R4).
+const WORKER_ERROR_STATUS = {
+  TEMPLATE_NOT_FOUND: 422,
+  SECTIONS_PARSE_ERROR: 422,
+  BUILD_FAILED: 500
+}
+
+function parseWorkerError(stdout) {
+  const line = String(stdout || '')
+    .split('\n')
+    .find((l) => l.startsWith('HWPX_BUILD_ERROR '))
+  if (line) {
+    try {
+      const parsed = JSON.parse(line.slice('HWPX_BUILD_ERROR '.length))
+      if (parsed && typeof parsed.message === 'string') {
+        return { message: parsed.message, status: WORKER_ERROR_STATUS[parsed.error_code] || 500 }
+      }
+    } catch {
+      /* fall through to generic */
+    }
+  }
+  return { message: 'HWPX 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.', status: 500 }
+}
 
 export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSections, rawDiagrams, docType }) {
   if (!title) throw createHttpError('제목이 비어 있습니다.', 422)
@@ -34,14 +67,17 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
     .map((item) => item.trim())
     .filter(Boolean)
 
-  const outputName = `${slugify(title) || 'generated'}-${Date.now()}.hwpx`
+  // Unpredictable, collision-free output name (review BE-04/BE-12). The slug is
+  // kept as a human hint; the UUID prevents enumeration and same-ms collisions.
+  const outputName = `${slugify(title) || 'generated'}-${crypto.randomUUID()}.hwpx`
   const outputPath = path.join(generatedDir, outputName)
 
   let templatePath = null
   const sourceDocumentName = (sourceFile?.originalname || 'uploaded-document').normalize('NFC')
 
   if (sourceFile && sourceFile.originalname.toLowerCase().endsWith('.hwpx')) {
-    const uploadPath = path.join(generatedDir, `${Date.now()}-${sanitizeName(sourceFile.originalname)}`)
+    // Uploaded original goes to the private work dir, never the served dir.
+    const uploadPath = path.join(workDir, `${crypto.randomUUID()}.hwpx`)
     await fs.writeFile(uploadPath, sourceFile.buffer)
     templatePath = uploadPath
   }
@@ -56,10 +92,10 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
       const sections = JSON.parse(rawSections)
       const diagrams = JSON.parse(rawDiagrams || '[]').map((d) => ({ ...d, _diagram: true }))
       const combined = [...sections, ...diagrams]
-      sectionsJsonPath = path.join(generatedDir, `${Date.now()}-sections.json`)
+      sectionsJsonPath = path.join(workDir, `${crypto.randomUUID()}-sections.json`)
       await fs.writeFile(sectionsJsonPath, JSON.stringify(combined), 'utf-8')
     } catch (err) {
-      console.warn('sections JSON parse failed:', err.message)
+      logger.warn({ err: err.message }, 'sections JSON parse failed')
     }
   }
 
@@ -74,16 +110,34 @@ export async function buildHwpx({ title, rawToc, sourceMode, sourceFile, rawSect
   if (templatePath) args.push('--template-file', templatePath)
   if (sectionsJsonPath) args.push('--sections-json', sectionsJsonPath)
 
+  // macOS: Homebrew의 libcairo 는 dyld 기본 검색 경로 밖에 있어
+  // cairosvg(다이어그램 PNG 변환)가 못 찾는다 → fallback 경로 주입
+  const pythonEnv = process.platform === 'darwin'
+    ? {
+        DYLD_FALLBACK_LIBRARY_PATH: ['/opt/homebrew/lib', '/usr/local/lib', process.env.DYLD_FALLBACK_LIBRARY_PATH]
+          .filter(Boolean)
+          .join(':')
+      }
+    : undefined
+
+  const buildStarted = Date.now()
   let result
   try {
-    result = await runProcess(pythonCmd, args, v4Root)
+    result = await runProcess(pythonCmd, args, v4Root, { env: pythonEnv })
   } finally {
     if (templatePath) fs.unlink(templatePath).catch(() => {})
     if (sectionsJsonPath) fs.unlink(sectionsJsonPath).catch(() => {})
   }
+  record('hwpx_build', { ok: result.ok, ms: Date.now() - buildStarted })
 
   if (!result.ok) {
-    throw createHttpError(result.stderr || 'HWPX 생성에 실패했습니다.', 500)
+    // Clean up any partially-written output so it is never served (review PY-03).
+    await fs.unlink(outputPath).catch(() => {})
+    const { message, status } = parseWorkerError(result.stdout)
+    // Never surface raw stderr/traceback to the user (CLAUDE.md R4). The full
+    // stderr is preserved in server logs for debugging.
+    if (result.stderr) logger.error({ stderr: result.stderr }, 'build_hwpx worker failed')
+    throw createHttpError(message, status)
   }
 
   // v4: 생성된 HWPX 에 대해 native + polaris 검증 실행.
