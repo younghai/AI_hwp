@@ -25,6 +25,14 @@ FAILED=0
 TOTAL=0
 PASSED=0
 
+# 모든 /api/* 는 세션 필요 — 케이스 전체가 공유하는 dev mock 세션 확보
+COOKIE_JAR="$(mktemp)"
+trap "rm -f '$COOKIE_JAR'" EXIT
+if ! curl -sSf -c "$COOKIE_JAR" "$SERVER_URL/auth/google/mock" > /dev/null; then
+    echo "✗ mock 로그인 실패 (NODE_ENV=development 인가?)"
+    exit 1
+fi
+
 run_case() {
     local case_dir="$1"
     local name
@@ -54,7 +62,7 @@ run_case() {
     template=$(python3 -c "import json; d=json.load(open('$input_json')); print(d['request']['templateRelPath'])")
 
     # POST
-    curl -sS -X POST "$SERVER_URL/api/export-hwpx" \
+    curl -sS -b "$COOKIE_JAR" -X POST "$SERVER_URL/api/export-hwpx" \
         -F "title=$title" \
         -F "toc=$toc" \
         -F "sections=$sections" \
@@ -73,7 +81,7 @@ run_case() {
 
     local url
     url=$(python3 -c "import json; print(json.load(open('$tmp/resp.json'))['downloadUrl'])")
-    curl -sS "$SERVER_URL$url" -o "$tmp/out.hwpx"
+    curl -sS -b "$COOKIE_JAR" "$SERVER_URL$url" -o "$tmp/out.hwpx"
 
     # 판정
     python3 - "$input_json" "$tmp/resp.json" "$tmp/out.hwpx" <<'PYEOF'

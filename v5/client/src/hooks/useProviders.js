@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 const STORAGE_KEY = 'v2-aiProvider'
+const MODEL_STORAGE_KEY = 'v2-aiModel-by-provider'
 
 function readStoredProvider() {
   try {
@@ -20,9 +21,29 @@ function persistProvider(key) {
   } catch { /* ignore */ }
 }
 
+function readModelMap() {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return JSON.parse(window.localStorage.getItem(MODEL_STORAGE_KEY)) || {}
+    }
+  } catch { /* ignore */ }
+  return {}
+}
+
+function persistModel(providerKey, modelId) {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const map = readModelMap()
+      map[providerKey] = modelId
+      window.localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(map))
+    }
+  } catch { /* ignore */ }
+}
+
 export function useProviders(onError, enabled = true) {
   const [providers, setProviders] = useState([])
   const [aiProvider, setAiProviderState] = useState(readStoredProvider)
+  const [modelMap, setModelMap] = useState(readModelMap)
   const onErrorRef = useRef(onError)
 
   useEffect(() => {
@@ -73,5 +94,16 @@ export function useProviders(onError, enabled = true) {
   const activeProvider = providers.find((p) => p.key === aiProvider) || null
   const hasConfigured = providers.some((p) => p.configured)
 
-  return { providers, aiProvider, setAiProvider, refresh, activeProvider, hasConfigured }
+  const activeModels = activeProvider?.models || []
+  const storedModel = modelMap[aiProvider]
+  const aiModel = activeModels.some((m) => m.id === storedModel)
+    ? storedModel
+    : (activeProvider?.defaultModel || storedModel || '')
+
+  const setAiModel = useCallback((modelId) => {
+    persistModel(aiProvider, modelId)
+    setModelMap((prev) => ({ ...prev, [aiProvider]: modelId }))
+  }, [aiProvider])
+
+  return { providers, aiProvider, setAiProvider, refresh, activeProvider, hasConfigured, aiModel, setAiModel, activeModels }
 }

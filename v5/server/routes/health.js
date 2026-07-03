@@ -1,9 +1,10 @@
 import { Router } from 'express'
-import { requireSession } from '../lib/session.js'
 
 const router = Router()
-router.use('/api', requireSession)
 
+// Intentionally public (no requireSession): load balancers, uptime monitors,
+// and container healthchecks can't authenticate, and the payload here reveals
+// nothing session-specific.
 router.get('/api/health', (_req, res) => {
   res.json({
     ok: true,

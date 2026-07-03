@@ -8,6 +8,8 @@ import { createHttpError } from '../lib/errors.js'
 import { generatedDir, getDb, listGeneratedFilesBySid } from '../lib/db.js'
 import { runProcess, slugify, sanitizeName } from '../lib/utils.js'
 import { decodeOriginalName, assertValidUpload } from '../lib/upload.js'
+import { logger } from '../lib/logger.js'
+import { record } from '../lib/metrics.js'
 import { validateHwpx } from './validator.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -67,6 +69,32 @@ const deleteGeneratedPreviewStmt = db.prepare(`
 
 function createWorkDir() {
   return fs.mkdtemp(path.join(tempRootDir, 'build-'))
+}
+
+// Map build_hwpx.py's structured stdout error (see its _emit_error) to a
+// user-safe message + HTTP status. Falls back to a generic message so raw
+// tracebacks never reach the client (CLAUDE.md R4).
+const WORKER_ERROR_STATUS = {
+  TEMPLATE_NOT_FOUND: 422,
+  SECTIONS_PARSE_ERROR: 422,
+  BUILD_FAILED: 500
+}
+
+function parseWorkerError(stdout) {
+  const line = String(stdout || '')
+    .split('\n')
+    .find((l) => l.startsWith('HWPX_BUILD_ERROR '))
+  if (line) {
+    try {
+      const parsed = JSON.parse(line.slice('HWPX_BUILD_ERROR '.length))
+      if (parsed && typeof parsed.message === 'string') {
+        return { message: parsed.message, status: WORKER_ERROR_STATUS[parsed.error_code] || 500 }
+      }
+    } catch {
+      /* fall through to generic */
+    }
+  }
+  return { message: 'HWPX 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.', status: 500 }
 }
 
 async function moveFileSafe(sourcePath, targetPath) {
@@ -294,7 +322,7 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
       sectionsJsonPath = path.join(workDir, `${crypto.randomUUID()}-sections.json`)
       await fs.writeFile(sectionsJsonPath, JSON.stringify(combined), 'utf-8')
     } catch (err) {
-      console.warn('sections JSON parse failed:', err.message)
+      logger.warn({ err: err.message }, 'sections JSON parse failed')
     }
   }
   reportJsonPath = path.join(workDir, `${crypto.randomUUID()}-diagram-report.json`)
@@ -311,10 +339,21 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
   if (templatePath) args.push('--template-file', templatePath)
   if (sectionsJsonPath) args.push('--sections-json', sectionsJsonPath)
 
+  // macOS: Homebrew의 libcairo 는 dyld 기본 검색 경로 밖에 있어
+  // cairosvg(다이어그램 PNG 변환)가 못 찾는다 → fallback 경로 주입
+  const pythonEnv = process.platform === 'darwin'
+    ? {
+        DYLD_FALLBACK_LIBRARY_PATH: ['/opt/homebrew/lib', '/usr/local/lib', process.env.DYLD_FALLBACK_LIBRARY_PATH]
+          .filter(Boolean)
+          .join(':')
+      }
+    : undefined
+
+  const buildStarted = Date.now()
   let result
   let diagramReport = null
   try {
-    result = await runProcess(pythonCmd, args, v4Root)
+    result = await runProcess(pythonCmd, args, v4Root, { env: pythonEnv })
     try {
       const reportRaw = await fs.readFile(reportJsonPath, 'utf-8')
       diagramReport = JSON.parse(reportRaw)
@@ -329,10 +368,15 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
     if (sectionsJsonPath) fs.unlink(sectionsJsonPath).catch(() => {})
     if (reportJsonPath) fs.unlink(reportJsonPath).catch(() => {})
   }
+  record('hwpx_build', { ok: result.ok, ms: Date.now() - buildStarted })
 
   if (!result.ok) {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {})
-    throw createHttpError(result.stderr || 'HWPX 생성에 실패했습니다.', 500)
+    // Never surface raw stderr/traceback to the user (CLAUDE.md R4). The full
+    // stderr is preserved in server logs for debugging.
+    if (result.stderr) logger.error({ stderr: result.stderr }, 'build_hwpx worker failed')
+    const { message, status } = parseWorkerError(result.stdout)
+    throw createHttpError(message, status)
   }
 
   // v4: 생성된 HWPX 에 대해 native + polaris 검증 실행.

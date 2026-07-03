@@ -1,4 +1,5 @@
 import { getDb } from './db.js'
+import { escapeXml } from '../../shared/escape.js'
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000
 const db = getDb()
@@ -50,7 +51,7 @@ button{padding:12px 24px;border:none;border-radius:999px;background:#161616;colo
 <div class="card">
 <div class="icon">${success ? '&#10003;' : '&#10007;'}</div>
 <h2>${success ? '연결 완료' : '연결 실패'}</h2>
-<p>${message}</p>
+<p>${escapeXml(message)}</p>
 <button onclick="window.opener?.postMessage({type:'oauth-result',success:${success}},'${clientOrigin}');window.close()">닫기</button>
 </div>
 <script>window.opener?.postMessage({type:'oauth-result',success:${success}},'${clientOrigin}')</script>

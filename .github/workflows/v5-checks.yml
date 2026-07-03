@@ -1,0 +1,123 @@
+name: v5 Quality Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'v5/**'
+      - '.github/workflows/v5-checks.yml'
+  pull_request:
+    paths:
+      - 'v5/**'
+
+jobs:
+  v5-build-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # node:sqlite (server/lib/db.js) requires Node >= 22.5 — v4's workflow
+      # used Node 20, which cannot run v5 at all.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.32.1'
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('v5/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install workspace
+        run: |
+          cd v5
+          pnpm install
+
+      - name: Python syntax check (build_hwpx, validators)
+        run: |
+          cd v5
+          python3 -m py_compile scripts/build_hwpx.py
+          python3 -m py_compile scripts/diagram_templates.py
+          python3 -m py_compile scripts/fix_namespaces.py
+          python3 -m py_compile scripts/clone_form.py
+          python3 -m py_compile scripts/office/hwpx_utils.py
+          python3 -m py_compile scripts/validators/container.py
+          python3 -m py_compile scripts/validators/structure.py
+          python3 -m py_compile scripts/validators/validate.py
+          python3 -m py_compile scripts/validators/report.py
+
+      - name: Server module syntax check
+        run: |
+          cd v5/server
+          for f in index.js lib/*.js services/*.js routes/*.js; do
+            node --check "$f"
+          done
+
+      - name: Shared module syntax check
+        run: |
+          cd v5
+          for f in shared/*.js; do
+            node --check "$f"
+          done
+
+      - name: Client production build
+        run: |
+          cd v5
+          pnpm --dir client build
+
+      - name: Run client unit tests
+        run: |
+          cd v5
+          pnpm --dir client test
+
+      - name: Start dev server (background)
+        run: |
+          cd v5
+          pnpm run dev > /tmp/v5-dev.log 2>&1 &
+          # wait for server up to 30s
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8794/api/health > /dev/null 2>&1; then
+              echo "v5 server ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8794/api/health || (cat /tmp/v5-dev.log; exit 1)
+
+      - name: Run smoke test
+        run: bash v5/tools/smoke-test.sh
+
+      - name: Run golden tests
+        run: bash v5/testdata/run-golden.sh
+
+      - name: Validate sample HWPX
+        run: |
+          # 가장 최근 생성 파일 찾아 validator CLI 로 검증
+          LATEST=$(ls -t v5/generated/*.hwpx 2>/dev/null | head -1)
+          if [ -n "$LATEST" ]; then
+            python3 v5/scripts/validators/validate.py "$LATEST" --format=text
+          else
+            echo "No HWPX produced — skipping standalone validator check"
+          fi
+
+      - name: Upload dev log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v5-dev-log
+          path: /tmp/v5-dev.log

@@ -17,6 +17,9 @@ document.hwpx
 .env
 .env.*
 *.env
+# ...but templates (each version's server/.env.example) must stay trackable —
+# without this, ".env.*" above silently blocks them from ever being committed.
+!.env.example
 
 # Dependencies
 node_modules/

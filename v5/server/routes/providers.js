@@ -12,6 +12,7 @@ router.get('/api/providers', (req, res) => {
     key,
     label: val.label,
     defaultModel: val.defaultModel,
+    models: val.models || [],
     configured: Boolean(getSessionProviderSecret(req.sessionId, val.envKey)),
     oauthSupported: Boolean(val.oauth && process.env[val.oauth?.clientIdEnv])
   }))
@@ -47,10 +48,10 @@ router.post('/api/test-provider', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'API 키가 없습니다.' })
   }
   try {
-    const text = providerKey === 'anthropic'
+    const { text } = providerKey === 'anthropic'
       ? await callAnthropic(provider, key, '한 문장으로 자기소개를 해 주세요.')
       : await callOpenAICompatible(provider, key, '한 문장으로 자기소개를 해 주세요.')
-    res.json({ ok: true, message: text.slice(0, 200) })
+    res.json({ ok: true, message: (text || '').slice(0, 200) })
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message })
   }

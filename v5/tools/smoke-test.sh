@@ -19,6 +19,7 @@ TEMPLATE="${TEMPLATE:-$V5_ROOT/templates/gonmun.hwpx}"
 RUN_ID="SMOKE_$(date +%s)_$$"
 OUT_DIR="$(mktemp -d)"
 trap "rm -rf '$OUT_DIR'" EXIT
+COOKIE_JAR="$OUT_DIR/cookies.txt"
 
 pass() { printf "  \033[32m✓\033[0m %s\n" "$1"; }
 fail() { printf "  \033[31m✗\033[0m %s\n" "$1"; FAILED=1; }
@@ -33,15 +34,23 @@ else
 fi
 
 echo ""
-echo "=== 2. Providers list ==="
-if curl -sf "$SERVER_URL/api/providers" | grep -q '"providers"'; then
+echo "=== 2. Dev mock login (모든 /api/* 는 세션 필요) ==="
+if curl -sf -c "$COOKIE_JAR" "$SERVER_URL/auth/google/mock" > /dev/null; then
+  pass "mock 세션 확보"
+else
+  fail "mock 로그인 실패 (NODE_ENV=development 인가?)"
+fi
+
+echo ""
+echo "=== 3. Providers list ==="
+if curl -sf -b "$COOKIE_JAR" "$SERVER_URL/api/providers" | grep -q '"providers"'; then
   pass "$SERVER_URL/api/providers"
 else
   fail "$SERVER_URL/api/providers"
 fi
 
 echo ""
-echo "=== 3. Client (Vite) HTML ==="
+echo "=== 4. Client (Vite) HTML ==="
 if curl -sf -o /dev/null -w "%{http_code}" "$CLIENT_URL/" | grep -q 200; then
   pass "$CLIENT_URL/"
 else
@@ -49,7 +58,7 @@ else
 fi
 
 echo ""
-echo "=== 4. rhwp.js glue served ==="
+echo "=== 5. rhwp.js glue served ==="
 CONTENT_TYPE=$(curl -sIf "$CLIENT_URL/node_modules/@rhwp/core/rhwp.js" | grep -i '^content-type:' | head -1 || true)
 if echo "$CONTENT_TYPE" | grep -qi 'javascript'; then
   pass "rhwp.js (${CONTENT_TYPE%$'\r'})"
@@ -58,7 +67,7 @@ else
 fi
 
 echo ""
-echo "=== 5. rhwp_bg.wasm magic bytes ==="
+echo "=== 6. rhwp_bg.wasm magic bytes ==="
 MAGIC=$(curl -sf "$CLIENT_URL/node_modules/@rhwp/core/rhwp_bg.wasm" | head -c 4 | xxd -p)
 if [ "$MAGIC" = "0061736d" ]; then
   pass "wasm magic \\0asm OK"
@@ -67,11 +76,11 @@ else
 fi
 
 echo ""
-echo "=== 6. E2E: API → HWPX 빌드 → 마커 검증 ==="
+echo "=== 7. E2E: API → HWPX 빌드 → 마커 검증 ==="
 RESP_JSON="$OUT_DIR/resp.json"
 OUT_HWPX="$OUT_DIR/out.hwpx"
 
-curl -sf -X POST "$SERVER_URL/api/export-hwpx" \
+curl -sf -b "$COOKIE_JAR" -X POST "$SERVER_URL/api/export-hwpx" \
   -F "title=${RUN_ID}_TITLE" \
   -F "toc=배경 및 목적
 현황 분석
@@ -86,7 +95,7 @@ if [ -z "$DOWNLOAD_URL" ]; then
   fail "/api/export-hwpx 응답에 downloadUrl 없음: $(cat $RESP_JSON)"
 else
   pass "/api/export-hwpx → $DOWNLOAD_URL"
-  curl -sf "$SERVER_URL$DOWNLOAD_URL" -o "$OUT_HWPX"
+  curl -sf -b "$COOKIE_JAR" "$SERVER_URL$DOWNLOAD_URL" -o "$OUT_HWPX"
 
   if python3 "$V5_ROOT/tools/verify-hwpx-markers.py" "$OUT_HWPX" \
      "${RUN_ID}_TITLE" "${RUN_ID}_A" "${RUN_ID}_B" "${RUN_ID}_C" "${RUN_ID}_D" \
