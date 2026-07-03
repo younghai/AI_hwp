@@ -4,8 +4,11 @@ import { LoginOverlay } from './components/LoginOverlay.jsx'
 import { ProviderSettings } from './components/ProviderSettings.jsx'
 import { ControlPanel } from './components/ControlPanel.jsx'
 import { PreviewPanel } from './components/PreviewPanel.jsx'
+import { ProgressStepper } from './components/ProgressStepper.jsx'
 import { ValidationPanel } from './components/ValidationPanel.jsx'
+import { HistoryPanel } from './components/HistoryPanel.jsx'
 import { EmptyState } from './components/EmptyState.jsx'
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
 import { ToastContainer } from './components/Toast.jsx'
 import { useProviders } from './hooks/useProviders.js'
 import { useRhwp } from './hooks/useRhwp.js'
@@ -17,20 +20,31 @@ export default function App() {
   const previewPanelRef = useRef(null)
 
   const [sourceFile, setSourceFile] = useState(null)
-  const [aiApiKey] = useState('')
   const [docType, setDocType] = useState('report')
   const [companyName, setCompanyName] = useState('Bizmatrixx')
   const [goal, setGoal] = useState('업로드한 문서의 핵심 내용을 바탕으로 임원 검토용 초안을 만들어 주세요.')
   const [notes, setNotes] = useState('핵심 메시지는 유지하고, 목차는 더 명확하게 재구성해 주세요.')
   const [targetTitle, setTargetTitle] = useState('')
+  const [docFields, setDocFields] = useState({})
   const [showSettings, setShowSettings] = useState(false)
+  const [stage, setStage] = useState('idle')
+
+  // Reset type-specific fields when the document type changes.
+  function handleDocTypeChange(next) {
+    setDocType(next)
+    setDocFields({})
+  }
+  function setDocField(key, value) {
+    setDocFields((prev) => ({ ...prev, [key]: value }))
+  }
 
   const { user, logout, loginWithPopup } = useAuth()
   const autoLogin = import.meta.env.VITE_AUTO_LOGIN === 'true'
   const { toasts, dismiss, success, error: errorToast, info } = useToast()
 
   const {
-    providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured
+    providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured,
+    aiModel, setAiModel, activeModels
   } = useProviders((err) => {
     console.warn('providers fetch failed', err)
     errorToast('AI provider 목록을 불러오지 못했습니다.')
@@ -46,10 +60,33 @@ export default function App() {
     clearBuiltPreview
   } = useRhwp()
   const {
-    draft, setDraft, draftLoading, exportState, generateDraft, buildHwpx, downloadBuilt
+    draft, setDraft, draftLoading, exportState, generateDraft, buildHwpx, downloadBuilt, cancelAll,
+    updateSection, addSection, removeSection, moveSection, updateTitle, regenerateSection
   } = useDraft({ setParseStatus })
 
+  const [editing, setEditing] = useState(false)
+
+  // Shared context for section-level regenerate + build (review PO-01).
+  function draftContext() {
+    return { docType, companyName, goal, notes, docFields, sourceText: sourceInsight.extractedText, aiProvider, model: aiModel }
+  }
+
+  function usageMessage(usage) {
+    if (!usage) return ''
+    const prefix = usage.tokensMeasured ? '' : '추정 '
+    const cost = usage.estCostUsd > 0 ? ` · ${prefix}비용 $${usage.estCostUsd.toFixed(4)}` : ''
+    return `AI 응답 ${(usage.elapsedMs / 1000).toFixed(1)}초${cost}`
+  }
+
+  function handleCancel() {
+    cancelAll()
+    setStage('idle')
+    setParseStatus('작업을 취소했습니다.')
+  }
+
   async function handleFileSelect(file) {
+    setStage('idle')
+    setEditing(false)
     if (!file) {
       setSourceFile(null)
       setDraft(null)
@@ -79,42 +116,50 @@ export default function App() {
     })
   }
 
+  // Step 1 of the loop: generate the draft, then hand off to the editor for
+  // review/edit. Building the HWPX is a separate, explicit step (handleBuild).
   async function handleGenerate() {
-    clearBuiltPreview()
     if (!hasConfigured) {
       errorToast('먼저 우측 상단 ⚙ 버튼에서 AI 키를 설정해주세요.', {
         action: { label: '설정 열기', onClick: () => setShowSettings(true) }
       })
       return
     }
+    clearBuiltPreview()
+    setEditing(true)
+    setStage('generating')
     const next = await generateDraft({
-      sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle,
-      aiProvider, onOptimistic: scrollToPreview
+      sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle, docFields,
+      aiProvider, aiModel, onOptimistic: scrollToPreview
     })
     if (!next) {
+      setStage('error')
       scrollToPreview()
       errorToast('AI 초안 생성에 실패했습니다. 우측 패널의 메시지를 확인해주세요.')
       return
     }
     if (next.title) setTargetTitle(next.title)
-    if (next.usage) {
-      const cost = next.usage.estCostUsd > 0
-        ? ` · 추정 비용 $${next.usage.estCostUsd.toFixed(4)}`
-        : ''
-      info(`AI 응답 ${(next.usage.elapsedMs / 1000).toFixed(1)}초${cost}`)
-    }
+    if (next.usage) info(usageMessage(next.usage))
+    setStage('idle')
+    setParseStatus('AI 초안이 준비됐습니다. 내용을 검토·수정한 뒤 "이 초안으로 HWPX 생성"을 누르세요.')
+    scrollToPreview()
+  }
 
-    setParseStatus('AI 초안을 바탕으로 HWPX 파일을 생성하는 중입니다...')
-    const built = await buildHwpx({ draftOverride: next, sourceFile, sourceInsight, docType })
+  // Step 2: build the HWPX from the (possibly edited) draft, then render it.
+  async function handleBuild() {
+    if (!draft) return
+    setEditing(false)
+    setStage('building')
+    setParseStatus('초안 내용을 바탕으로 HWPX 파일을 생성하는 중입니다...')
+    const built = await buildHwpx({ draftOverride: draft, sourceFile, sourceInsight, docType })
     if (built?.url) {
+      setStage('rendering')
       setParseStatus('HWPX를 렌더링해 미리보기에 반영합니다...')
       const rendered = await renderBuiltHwpx(built.url, built.fileName)
-      if (rendered) {
-        setParseStatus('미리보기와 다운로드 파일이 동일한 HWPX로 생성되었습니다.')
-      } else {
-        setParseStatus('HWPX 파일이 생성되었습니다. 다운로드 버튼으로 받을 수 있습니다.')
-      }
-      // 검증 결과 토스트
+      setParseStatus(rendered
+        ? '미리보기와 다운로드 파일이 동일한 HWPX로 생성되었습니다.'
+        : 'HWPX 파일이 생성되었습니다. 다운로드 버튼으로 받을 수 있습니다.')
+      setStage('done')
       const v = built.validation
       if (v) {
         if (!v.ok) {
@@ -122,13 +167,24 @@ export default function App() {
         } else if (v.warningCount > 0) {
           info(`HWPX 검증: 경고 ${v.warningCount}건. 큰 문제는 없습니다.`)
         } else {
-          success('HWPX 검증 통과!')
+          success('HWPX 검증 통과! 다운로드할 수 있습니다.')
         }
       }
     } else {
+      setEditing(true)
+      setStage('error')
       errorToast('HWPX 빌드에 실패했습니다.')
     }
     scrollToPreview()
+  }
+
+  function handleRegenerateSection(index) {
+    return regenerateSection(index, draftContext())
+  }
+
+  function handleEditAgain() {
+    setEditing(true)
+    setStage('idle')
   }
 
   function handleDownload() {
@@ -136,6 +192,7 @@ export default function App() {
   }
 
   const showEmptyState = !sourceFile && !draft && !builtPreview.svgs.length
+  const showEditor = Boolean(draft) && (editing || !builtPreview.svgs.length)
 
   return (
     <ErrorBoundary>
@@ -164,11 +221,13 @@ export default function App() {
           onFileSelect={handleFileSelect}
           sourceFile={sourceFile}
           sourceInsight={sourceInsight}
-          docType={docType} setDocType={setDocType}
+          docType={docType} setDocType={handleDocTypeChange}
+          docFields={docFields} setDocField={setDocField}
           companyName={companyName} setCompanyName={setCompanyName}
           targetTitle={targetTitle} setTargetTitle={setTargetTitle}
           goal={goal} setGoal={setGoal}
           notes={notes} setNotes={setNotes}
+          activeModels={activeModels} aiModel={aiModel} setAiModel={setAiModel}
           onGenerate={handleGenerate}
           onDownload={handleDownload}
           draftLoading={draftLoading}
@@ -180,6 +239,8 @@ export default function App() {
         <div className="preview-column">
           {showEmptyState && <EmptyState onTrySample={handleTrySample} />}
 
+          <ProgressStepper stage={stage} onCancel={handleCancel} />
+
           <PreviewPanel
             ref={previewPanelRef}
             draft={draft}
@@ -187,11 +248,25 @@ export default function App() {
             docType={docType}
             parseStatus={parseStatus}
             builtPreview={builtPreview}
+            showEditor={showEditor}
+            editing={editing}
+            building={exportState.loading}
+            canRegenerate={hasConfigured}
+            onTitleChange={updateTitle}
+            onSectionChange={updateSection}
+            onAddSection={addSection}
+            onRemoveSection={removeSection}
+            onMoveSection={moveSection}
+            onRegenerateSection={handleRegenerateSection}
+            onBuild={handleBuild}
+            onEditAgain={handleEditAgain}
           />
 
           {exportState.validation && (
             <ValidationPanel validation={exportState.validation} />
           )}
+
+          <HistoryPanel refreshKey={exportState.url} />
         </div>
       </main>
 

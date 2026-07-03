@@ -1,4 +1,4 @@
-import { DOC_TYPES } from '../lib/helpers.js'
+import { DOC_TYPES, getDocTypeMeta } from '../lib/helpers.js'
 import { Uploader } from './Uploader.jsx'
 
 const GOAL_MAX = 400
@@ -9,18 +9,50 @@ export function ControlPanel({
   sourceFile,
   sourceInsight,
   docType, setDocType,
+  docFields = {}, setDocField,
   companyName, setCompanyName,
   targetTitle, setTargetTitle,
   goal, setGoal,
   notes, setNotes,
+  activeModels = [], aiModel, setAiModel,
   onGenerate, onDownload,
   draftLoading, exportState, hasDraft,
   parseStatus
 }) {
+  const hasFile = Boolean(sourceFile)
+
   return (
     <section className="control-column">
       <div className="panel">
-        <p className="section-label">1. 생성 조건</p>
+        <p className="section-label">1. 원본 문서 업로드</p>
+        <Uploader
+          onFileSelect={onFileSelect}
+          currentFile={sourceFile}
+          currentInsight={sourceInsight}
+        />
+        {hasFile && sourceInsight.mode ? (
+          <div className={`mode-banner mode-banner--${sourceInsight.mode === 'hwpx-template' ? 'template' : 'source'}`} role="status">
+            <span className="mode-banner-icon" aria-hidden="true">
+              {sourceInsight.mode === 'hwpx-template' ? '🧩' : '✍️'}
+            </span>
+            <span className="mode-banner-text">
+              {sourceInsight.mode === 'hwpx-template'
+                ? <><strong>양식 유지 모드</strong> — 업로드한 HWPX 서식·표·레이아웃을 그대로 두고 본문만 AI로 채웁니다.</>
+                : <><strong>새 양식 생성 모드</strong> — HWP 원본 내용을 분석해 기본 HWPX 양식으로 새 문서를 만듭니다. 원본 서식은 유지되지 않습니다.</>}
+            </span>
+          </div>
+        ) : (
+          <p className="helper">
+            HWP는 내용을 분석해 새 HWPX 초안을 만들고, HWPX는 업로드한 양식을 결과 문서 템플릿으로 재사용합니다.
+          </p>
+        )}
+      </div>
+
+      <div className={`panel ${hasFile ? '' : 'panel--dimmed'}`} aria-disabled={!hasFile}>
+        <p className="section-label">2. 생성 조건</p>
+        {!hasFile && (
+          <p className="panel-dim-hint">먼저 위에서 문서를 업로드하면 생성 조건을 설정할 수 있습니다.</p>
+        )}
         <label>
           <span>문서 유형</span>
           <select value={docType} onChange={(e) => setDocType(e.target.value)}>
@@ -30,6 +62,27 @@ export function ControlPanel({
           </select>
           <small className="helper">생성할 문서의 성격을 선택하세요.</small>
         </label>
+        {getDocTypeMeta(docType).fields.map((field) => (
+          <label key={field.key}>
+            <span>{field.label}</span>
+            <input
+              value={docFields[field.key] || ''}
+              onChange={(e) => setDocField(field.key, e.target.value)}
+              placeholder={field.placeholder}
+            />
+          </label>
+        ))}
+        {activeModels.length > 1 && (
+          <label>
+            <span>AI 모델</span>
+            <select value={aiModel} onChange={(e) => setAiModel(e.target.value)}>
+              {activeModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.label}</option>
+              ))}
+            </select>
+            <small className="helper">품질·속도·비용이 다릅니다. 응답 후 실제 사용 토큰 기준 비용이 표시됩니다.</small>
+          </label>
+        )}
         <label>
           <span>회사명</span>
           <input
@@ -75,7 +128,7 @@ export function ControlPanel({
           </small>
         </label>
         <div className="button-row">
-          <button className="primary-button" type="button" onClick={onGenerate} disabled={draftLoading || exportState.loading}>
+          <button className="primary-button" type="button" onClick={onGenerate} disabled={!hasFile || draftLoading || exportState.loading}>
             {draftLoading
               ? '초안 생성 중...'
               : exportState.loading
@@ -92,18 +145,6 @@ export function ControlPanel({
           </a>
         )}
         <p className="status-message">{parseStatus}</p>
-      </div>
-
-      <div className="panel">
-        <p className="section-label">2. 원본 문서 업로드</p>
-        <Uploader
-          onFileSelect={onFileSelect}
-          currentFile={sourceFile}
-          currentInsight={sourceInsight}
-        />
-        <p className="helper">
-          HWP는 내용을 분석해 새 HWPX 초안을 만들고, HWPX는 업로드한 양식을 결과 문서 템플릿으로 재사용합니다.
-        </p>
       </div>
     </section>
   )

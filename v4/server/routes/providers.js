@@ -3,6 +3,8 @@ import { AI_PROVIDERS, knownEnvKeys } from '../lib/providers-config.js'
 import { writeEnvFile } from '../lib/env.js'
 import { sendError } from '../lib/errors.js'
 import { callAnthropic, callOpenAICompatible } from '../services/ai.js'
+import { requireSession } from '../lib/authGuard.js'
+import { hasOAuthToken } from '../lib/oauthTokens.js'
 
 const router = Router()
 
@@ -11,13 +13,14 @@ router.get('/api/providers', (_req, res) => {
     key,
     label: val.label,
     defaultModel: val.defaultModel,
-    configured: Boolean(process.env[val.envKey]),
+    models: (val.models || []).map((m) => ({ id: m.id, label: m.label })),
+    configured: Boolean(process.env[val.envKey]) || hasOAuthToken(key),
     oauthSupported: Boolean(val.oauth && process.env[val.oauth?.clientIdEnv])
   }))
   res.json({ ok: true, providers: list })
 })
 
-router.post('/api/settings', async (req, res) => {
+router.post('/api/settings', requireSession, async (req, res) => {
   try {
     const allowedKeys = knownEnvKeys()
     const safeKeys = Object.fromEntries(
@@ -33,7 +36,7 @@ router.post('/api/settings', async (req, res) => {
   }
 })
 
-router.post('/api/test-provider', async (req, res) => {
+router.post('/api/test-provider', requireSession, async (req, res) => {
   const { provider: providerKey, apiKey } = req.body || {}
   const provider = AI_PROVIDERS[providerKey]
   if (!provider) {
@@ -44,10 +47,10 @@ router.post('/api/test-provider', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'API 키가 없습니다.' })
   }
   try {
-    const text = providerKey === 'anthropic'
+    const { text } = providerKey === 'anthropic'
       ? await callAnthropic(provider, key, '한 문장으로 자기소개를 해 주세요.')
       : await callOpenAICompatible(provider, key, '한 문장으로 자기소개를 해 주세요.')
-    res.json({ ok: true, message: text.slice(0, 200) })
+    res.json({ ok: true, message: (text || '').slice(0, 200) })
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message })
   }
