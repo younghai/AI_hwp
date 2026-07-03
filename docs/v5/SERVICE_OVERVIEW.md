@@ -10,16 +10,20 @@
 
 - Google 로그인 후 세션 기반 사용
 - 세션별 AI provider key 저장
-- HWP/HWPX 업로드 후 초안 생성
+- HWP/HWPX 업로드 후 초안 생성 (모델 선택 가능, 문서 유형별 맞춤 지침/입력 필드)
+- 생성된 초안을 검토·수정 후 확정 (제목/섹션 편집, 섹션 추가·삭제·순서변경,
+  섹션 단위 AI 재생성 — `/api/regenerate-section`)
 - HWPX 내보내기 및 검증
 - 최근 생성 문서 목록 확인
 - 세션 소유 문서만 다운로드
+- 구조화 로깅(pino) + `/api/metrics` 로 AI/빌드 성공률·응답시간 확인
 
 ## 현재 운영 전제
 
 - 단일 호스트
 - localhost 또는 소규모 내부 데모
-- Node 24.x
+- Node 22.5 이상 (`node:sqlite` 내장 모듈 요구사항)
+- pnpm workspace (`pnpm-workspace.yaml` 필수)
 - Python 실행 환경 존재
 - rhwp 미리보기 실행 가능 환경
 
@@ -29,9 +33,10 @@
 - 생성 파일 레지스트리: 메모리 -> SQLite
 - 생성 파일 저장 위치: temp-only -> `v5/data/generated`
 - 다운로드 방식: 정적 노출 금지 + 세션 소유권 확인
+- OAuth state: SQLite(`oauth_states`) 기반, 세션 ID에 귀속 — v4의 인메모리
+  Map보다 재시작에 강하고, state 발급 세션과 콜백 세션이 다르면 거부됨
 
 ## 아직 남아 있는 제약
 
-- OAuth state는 아직 메모리 기반
 - Node 내장 SQLite는 experimental warning이 있음
 - 멀티 인스턴스 운영 전제는 아님

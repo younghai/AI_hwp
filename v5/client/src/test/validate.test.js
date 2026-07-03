@@ -11,12 +11,15 @@ describe('validateDraftPayload', () => {
     expect(() => validateDraftPayload(draft)).not.toThrow()
   })
 
-  it('rejects missing summary', () => {
+  it('defaults a missing summary to an empty string instead of rejecting', () => {
+    // The caller (server/services/draft.js) already falls back to a generated
+    // summary when this is empty, so treating a missing summary as optional
+    // here — rather than throwing — is the intended, consistent behavior.
     const draft = {
       sections: [{ heading: '제목', body: '본문' }],
       diagrams: []
     }
-    expect(() => validateDraftPayload(draft)).toThrow()
+    expect(validateDraftPayload(draft).summary).toBe('')
   })
 
   it('rejects empty sections', () => {

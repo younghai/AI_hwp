@@ -29,6 +29,15 @@
 - 만료 generated file metadata
 - 만료 generated file 실제 파일
 
+## 관측성
+
+- 구조화 로그(pino, JSON): 요청/응답은 `pino-http`가 자동 기록하고
+  `/api/health` 폴링은 노이즈라 제외. `LOG_LEVEL` 환경변수로 레벨 조절
+  (기본 info)
+- `/api/metrics`: `ai_draft`(AI 초안 생성), `hwpx_build`(HWPX 빌드) 각각의
+  성공/실패 건수와 평균 응답시간(ms)을 메모리 스냅샷으로 제공. 재시작하면
+  초기화됨(영구 저장 아님)
+
 ## 장애 포인트
 
 1. Python 미설치
@@ -38,14 +47,20 @@
    native validator note 반환
 
 3. SQLite experimental warning
-   Node 24 `node:sqlite` 특성으로 경고 출력 가능
+   `node:sqlite` 가 아직 experimental이라 기동 시 경고 출력 (Node 22.5+ 공통,
+   Node 24 한정 아님)
 
 4. 서버 재시작
-   세션/생성 메타데이터는 유지되지만, Google OAuth state는 메모리 기반이라 로그인 callback 도중 재시작하면 끊길 수 있음
+   세션/생성 메타데이터/OAuth state 모두 SQLite에 있어 재시작에도 유지된다.
+   단, `googleAuth.js`의 상태(state) 맵은 여전히 인메모리라 Google 로그인
+   콜백 도중 재시작하면 그 요청만 끊긴다 (범용 provider OAuth인
+   `/auth/:provider` 쪽은 `oauth_states` 테이블 기반이라 재시작에 영향받지
+   않음 — Google 로그인 전용 코드 경로만 아직 인메모리)
 
 ## 다음 단계 권장
 
-- Google OAuth state도 SQLite로 이동
+- `googleAuth.js`의 인메모리 state map도 `oauth_states` 테이블로 통합
+  (범용 provider OAuth와 동일하게)
 - generated file 삭제 API 추가
 - 최근 생성 문서 목록에 만료 상태 표시
-- `v5` 단독 배포용 README/boot script 정리
+- `/api/metrics`를 재시작에도 유지되는 형태로 확장(현재는 인메모리 스냅샷)

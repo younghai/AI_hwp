@@ -1,6 +1,12 @@
-# v4 — AI Document Studio (HWP/HWPX Automation)
+# v5 — AI Document Studio (HWP/HWPX Automation)
 
-**Read this file every time before working on v4. It encodes every mistake we've already made so you don't repeat them.**
+**Read this file every time before working on v5. It encodes every mistake we've already made so you don't repeat them.**
+
+v4와의 핵심 차이: v5는 **세션 기반**이다 (SQLite, `server/lib/db.js`/`session.js`).
+`.env`에 API 키를 두고 바로 쓰는 v4식 "no-auth" 모드는 없다 — 모든 `/api/*` 는
+로그인 세션이 있어야 하고, API 키는 세션별로 저장된다. 로컬 개발 편의를 위한
+Mock 로그인(`GET /auth/google/mock`, `NODE_ENV=development` + 실제 Google
+자격증명 미설정 시에만 활성)이 있을 뿐이다.
 
 ---
 
@@ -53,9 +59,21 @@
 - **실수 이력**: 다이어그램 `title`, `step`, `row.label` 등을 이스케이프 없이 삽입
 
 ### R8. 파일 업로드는 extension + MIME + magic bytes **셋 다 검증**
-- `shared/upload.js` 의 `assertValidUpload` 사용 강제
+- `server/lib/upload.js` 의 `assertValidUpload` 사용 강제
 - 한글 파일명은 `decodeOriginalName` 으로 UTF-8 복원
 - **실수 이력**: `generated/1776581...-áá¢áá£...hwpx` 같은 깨진 파일명 다수 발생
+
+### R9. 로컬 테스트 스크립트도 세션 쿠키 없이는 전부 401 — mock 로그인 먼저
+- v5는 `/api/health` 를 제외한 모든 `/api/*` 가 `requireSession` 을 거친다
+  (`server/routes/*.js` 의 `router.use('/api', requireSession)`)
+- `curl` 기반 검증/CI 스크립트는 반드시 `GET /auth/google/mock` (dev 전용) 으로
+  쿠키를 먼저 받아 이후 모든 요청에 `-b <cookie-jar>` 로 실어야 한다
+- **실수 이력**: `tools/smoke-test.sh`, `testdata/run-golden.sh` 둘 다 세션
+  쿠키 없이 `/api/providers`, `/api/export-hwpx` 를 호출하고 있었음(원래
+  v3/v4 스타일 그대로 복사돼 유입) — v5의 세션 모델이 생긴 뒤로 계속 깨져
+  있었지만 스크립트를 실제로 실행해보기 전까지 아무도 몰랐음. **CI에 스크립트를
+  연결하기 전에 로컬에서 직접 실행해 통과를 확인하라** (2026-07-03 v5 병합
+  작업 중 발견 및 수정)
 
 ---
 
@@ -65,21 +83,32 @@
 v5/
 ├── shared/              # client + server 공용 유틸 (escape, validate, docTypes)
 ├── server/
-│   ├── lib/             # 순수 유틸 (errors, env, oauth, upload, providers-config, session)
-│   ├── services/        # 비즈니스 로직 (ai, draft, hwpxBuilder)
-│   ├── routes/          # Express 라우터 (health, providers, draft, export, auth, samples)
-│   └── index.js         # 부트스트랩 (라우터 장착만, ~30줄)
+│   ├── lib/             # 순수 유틸 (errors, env, db, session, oauth, upload,
+│   │                       utils, providers-config, logger, metrics)
+│   ├── services/        # 비즈니스 로직 (ai, draft, hwpxBuilder, validator,
+│   │                       polarisValidator)
+│   ├── routes/          # Express 라우터 (health, providers, draft, export,
+│   │                       auth, googleAuth, samples)
+│   └── index.js         # 부트스트랩 (helmet/rate-limit/pino-http 장착 + 라우터
+│                           마운트만)
 ├── client/
 │   ├── src/
-│   │   ├── App.jsx      # 조합만 (~130줄). 로직 금지
+│   │   ├── App.jsx      # 조합만. 로직 금지
 │   │   ├── lib/         # 순수 함수 (diagrams, helpers)
-│   │   ├── hooks/       # 상태 (useRhwp, useDraft, useProviders, useToast)
-│   │   └── components/  # 프레젠테이션 (TopBar, ProviderSettings, ControlPanel,
-│   │                       PreviewPanel, EmptyState, Toast, ValidationPanel)
+│   │   ├── hooks/       # 상태 (useRhwp, useDraft, useProviders, useAuth,
+│   │   │                   useGeneratedFiles, useToast, useFocusTrap)
+│   │   └── components/  # 프레젠테이션 (TopBar, LoginOverlay, ProviderSettings,
+│   │                       ControlPanel, PreviewPanel, EditableDraft,
+│   │                       RecentDocuments, EmptyState, Toast, ValidationPanel)
 │   └── vite.config.js   # fs.allow=['..'] (workspace 부모 공유 접근)
 ├── scripts/build_hwpx.py  # Python 워커. Node가 spawn 으로 호출 (v5 자체 보유)
 └── templates/              # HWPX 템플릿 + 샘플 문서 (v5 자체 보유)
 ```
+
+세션/데이터는 SQLite(`server/lib/db.js`)에 저장된다: `sessions`,
+`session_provider_secrets`(프로바이더별 API 키, 세션 스코프), `oauth_states`,
+`generated_files`, `generated_previews`. 생성 파일은 세션 ID로 소유되고
+TTL 지나면 정리된다(`cleanupExpiredData`).
 
 **금기**:
 - `server/index.js` 에 라우트/서비스 로직 직접 작성 → 새 라우터 파일 만들기
@@ -92,12 +121,19 @@ v5/
 
 | 목적 | 명령 |
 |------|------|
-| dev 서버 시작 (server+client 병행) | `cd v5 && npm run dev` |
-| 클라이언트 프로덕션 빌드 | `cd v5/client && npm run build` |
+| 의존성 설치 (workspace 전체) | `cd v5 && pnpm install` |
+| dev 서버 시작 (server+client 병행) | `cd v5 && pnpm run dev` |
+| 클라이언트 프로덕션 빌드 | `cd v5 && pnpm --dir client build` |
+| 클라이언트 유닛 테스트 | `cd v5 && pnpm --dir client test` |
 | 서버 syntax 체크 | `cd v5/server && for f in index.js lib/*.js services/*.js routes/*.js; do node --check "$f"; done` |
 | Python 스크립트 syntax | `python3 -m py_compile scripts/build_hwpx.py` |
-| **E2E smoke test** | `bash v5/tools/smoke-test.sh` |
+| **E2E smoke test** (dev 서버 기동 중이어야 함) | `bash v5/tools/smoke-test.sh` |
+| **골든 테스트** (dev 서버 기동 중이어야 함) | `bash v5/testdata/run-golden.sh` |
 | **HWPX 내용 검증** | `python3 v5/tools/verify-hwpx-markers.py <file> MARKER1 MARKER2` |
+
+> pnpm 필수: `package.json`의 npm 스타일 `workspaces` 필드는 pnpm이 읽지 않는다.
+> workspace 루트에 `pnpm-workspace.yaml` 이 있어야 `pnpm install`이 client/server
+> 의존성을 실제로 설치한다 — 없어도 에러 없이 조용히 스킵되니 주의.
 
 ---
 
