@@ -184,3 +184,54 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     engine: provider.label
   }
 }
+
+// Regenerate the body of a single section (review PO-01, section-level regenerate).
+// Returns plain body text — no JSON wrapper — so the OpenAI-compatible path is
+// given a plain-text system prompt instead of the JSON-forcing default. Uses the
+// same session-scoped key + resolveModel resolution as buildDraftWithAI.
+export async function regenerateSectionWithAI(input, { sessionId } = {}) {
+  const heading = String(input.heading || '').trim()
+  const title = String(input.title || '문서').trim()
+  const docType = String(input.docType || 'report').trim()
+  const companyName = String(input.companyName || '회사명').trim()
+  const goal = String(input.goal || '').trim()
+  const notes = String(input.notes || '').trim()
+  const sourceText = String(input.sourceText || '').trim()
+  const otherHeadings = Array.isArray(input.otherHeadings) ? input.otherHeadings.filter(Boolean) : []
+  const providerKey = String(input.aiProvider || 'anthropic').trim()
+  const clientKey = String(input.aiApiKey || '').trim()
+
+  if (!heading) throw createHttpError('섹션 제목이 비어 있습니다.', 422)
+
+  const provider = AI_PROVIDERS[providerKey]
+  if (!provider) throw createHttpError(`지원하지 않는 AI 프로바이더입니다: ${providerKey}`, 400)
+
+  const sessionKey = sessionId ? getSessionProviderSecret(sessionId, provider.envKey) : ''
+  const apiKey = clientKey || sessionKey
+  if (!apiKey) {
+    throw createHttpError(`API 키가 설정되지 않았습니다. ${provider.label} 연결 또는 현재 요청의 API 키 입력이 필요합니다.`, 401)
+  }
+
+  const docLabel = labelForDocType(docType)
+  const systemPrompt = '당신은 한국어 공식 문서 작성 전문가입니다. 요청한 섹션의 본문 텍스트만 출력하세요.'
+  const prompt = `"${title}" ${docLabel}의 "${heading}" 섹션 본문만 새로 작성하세요.
+${sourceText ? `\n원문 참고:\n---\n${sourceText.slice(0, 4000)}\n---\n` : ''}
+회사명: ${companyName}
+${goal ? `작성 목표: ${goal}` : ''}
+${notes ? `추가 참고: ${notes}` : ''}
+${otherHeadings.length ? `다른 섹션(내용 중복 금지): ${otherHeadings.join(', ')}` : ''}
+
+규칙:
+- "${heading}" 섹션에 해당하는 본문만 3~5개의 완결된 문장으로 작성.
+- 제목·머리말·목록기호·JSON 없이 본문 문장만 출력.
+- 다른 섹션과 내용 중복 금지. 마침표로 끝나는 완결 문장만.`
+
+  const chosenModel = resolveModel(provider, input.model)
+  const { text } = providerKey === 'anthropic'
+    ? await callAnthropic(provider, apiKey, prompt, { systemPrompt, model: chosenModel.id })
+    : await callOpenAICompatible(provider, apiKey, prompt, { systemPrompt, model: chosenModel.id })
+
+  const body = String(text || '').trim()
+  if (!body) throw createHttpError('AI가 빈 응답을 반환했습니다.', 502)
+  return { body }
+}

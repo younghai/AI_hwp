@@ -26,6 +26,7 @@ export default function App() {
   const [notes, setNotes] = useState('핵심 메시지는 유지하고, 목차는 더 명확하게 재구성해 주세요.')
   const [targetTitle, setTargetTitle] = useState('')
   const [showSettings, setShowSettings] = useState(false)
+  const [editing, setEditing] = useState(false)
 
   const { user, logout, loginWithPopup } = useAuth()
   const {
@@ -55,19 +56,22 @@ export default function App() {
     clearBuiltPreview
   } = useRhwp()
   const {
-    draft, setDraft, draftLoading, exportState, generateDraft, buildHwpx, downloadBuilt
+    draft, setDraft, draftLoading, exportState, generateDraft, buildHwpx, downloadBuilt,
+    updateSection, addSection, removeSection, moveSection, updateTitle, regenerateSection
   } = useDraft({ setParseStatus })
 
   async function handleFileSelect(file) {
     if (!file) {
       setSourceFile(null)
       setDraft(null)
+      setEditing(false)
       clearBuiltPreview()
       setParseStatus('업로드한 문서를 분석하면 여기 상태가 표시됩니다.')
       return
     }
     setSourceFile(file)
     setDraft(null)
+    setEditing(false)
     clearBuiltPreview()
     await parseFile(file)
     if (!targetTitle) {
@@ -88,6 +92,13 @@ export default function App() {
     })
   }
 
+  // Shared context for section-level regenerate + build (review PO-01).
+  function draftContext() {
+    return { docType, companyName, goal, notes, sourceText: sourceInsight.extractedText, aiProvider, model: aiModel }
+  }
+
+  // Step 1 of the loop: generate the draft, then hand off to the editor for
+  // review/edit. Building the HWPX is a separate, explicit step (handleBuild).
   async function handleGenerate() {
     clearBuiltPreview()
     if (!hasConfigured) {
@@ -105,16 +116,24 @@ export default function App() {
       errorToast('AI 초안 생성에 실패했습니다. 우측 패널의 메시지를 확인해주세요.')
       return
     }
+    setEditing(true)
     if (next.title) setTargetTitle(next.title)
     if (next.usage) {
+      const prefix = next.usage.tokensMeasured ? '' : '추정 '
       const cost = next.usage.estCostUsd > 0
-        ? ` · 추정 비용 $${next.usage.estCostUsd.toFixed(4)}`
+        ? ` · ${prefix}비용 $${next.usage.estCostUsd.toFixed(4)}`
         : ''
       info(`AI 응답 ${(next.usage.elapsedMs / 1000).toFixed(1)}초${cost}`)
     }
+    setParseStatus('AI 초안이 준비됐습니다. 내용을 검토·수정한 뒤 "이 초안으로 HWPX 생성"을 누르세요.')
+    scrollToPreview()
+  }
 
+  // Step 2: build the HWPX from the (possibly edited) draft, then render it.
+  async function handleBuild() {
+    setEditing(false)
     setParseStatus('AI 초안을 바탕으로 HWPX 파일을 생성하는 중입니다...')
-    const built = await buildHwpx({ draftOverride: next, sourceFile, sourceInsight, docType })
+    const built = await buildHwpx({ draftOverride: draft, sourceFile, sourceInsight, docType })
     if (built?.url) {
       setParseStatus('HWPX를 렌더링해 미리보기에 반영합니다...')
       const rendered = await renderBuiltHwpx(built.url, built.fileName)
@@ -167,9 +186,18 @@ export default function App() {
         }
       }
     } else {
+      setEditing(true)
       errorToast('HWPX 빌드에 실패했습니다.')
     }
     scrollToPreview()
+  }
+
+  function handleRegenerateSection(index) {
+    return regenerateSection(index, draftContext())
+  }
+
+  function handleEditAgain() {
+    setEditing(true)
   }
 
   function handleDownload() {
@@ -197,6 +225,7 @@ export default function App() {
   }
 
   const showEmptyState = !sourceFile && !draft && !builtPreview.svgs.length
+  const showEditor = Boolean(draft) && (editing || !builtPreview.svgs.length)
 
   return (
     <ErrorBoundary>
@@ -252,6 +281,17 @@ export default function App() {
             docType={docType}
             parseStatus={parseStatus}
             builtPreview={builtPreview}
+            showEditor={showEditor}
+            building={exportState.loading}
+            canRegenerate={hasConfigured}
+            onTitleChange={updateTitle}
+            onSectionChange={updateSection}
+            onAddSection={addSection}
+            onRemoveSection={removeSection}
+            onMoveSection={moveSection}
+            onRegenerateSection={handleRegenerateSection}
+            onBuild={handleBuild}
+            onEditAgain={handleEditAgain}
           />
 
           {exportState.validation && (

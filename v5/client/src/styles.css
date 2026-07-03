@@ -9,6 +9,7 @@
   --accent-strong: #ffcb05;
   --accent-soft: #fff6c7;
   --ink: #101010;
+  --surface-sunken: rgba(255, 255, 255, 0.96); /* inputs, meta cells, draft articles */
   --radius-sm: 14px;
   --radius-md: 24px;
   --radius-lg: 34px;
@@ -27,6 +28,7 @@
     --accent-strong: #ffb300;
     --accent-soft: #3d3418;
     --ink: #f0f0f0;
+    --surface-sunken: rgba(255, 255, 255, 0.05);
     --shadow: 0 30px 70px rgba(0, 0, 0, 0.3);
   }
 
@@ -1135,6 +1137,10 @@ small.helper {
   .secondary-button {
     width: 100%;
   }
+  .editable-section-toolbar { flex-wrap: wrap; }
+  .editable-section-heading { flex-basis: 100%; order: -1; }
+  .editable-draft-footer .primary-button,
+  .editable-draft-footer .secondary-button { width: 100%; }
 }
 
 /* ════════ v4 ValidationPanel ════════ */
@@ -1234,3 +1240,107 @@ small.helper {
 .toast-close:hover { background: rgba(0,0,0,0.1); color: var(--ink); }
 
 .preview-section { display: block; }
+
+/* Draft review/edit loop (review PO-01) */
+.preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.preview-head-actions { display: inline-flex; align-items: center; gap: 10px; }
+.preview-edit-again {
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.preview-edit-again:hover { background: var(--surface-sunken); }
+
+.editable-draft { margin-top: 16px; display: flex; flex-direction: column; gap: 14px; }
+.editable-draft-head { display: flex; flex-direction: column; gap: 8px; }
+.editable-title-field { display: grid; gap: 6px; }
+.editable-title-field span { font-size: 0.82rem; font-weight: 700; color: var(--muted); }
+.editable-title-field input { font-size: 1.1rem; font-weight: 700; }
+.editable-draft-summary { margin: 0; color: var(--muted); font-size: 0.9rem; line-height: 1.5; }
+.editable-draft-hint {
+  margin: 0; padding: 10px 12px; border-radius: 10px;
+  background: rgba(255, 203, 5, 0.1); color: var(--text); font-size: 0.84rem;
+}
+
+.editable-sections { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.editable-section {
+  border: 1px solid var(--line); border-radius: 18px; padding: 14px;
+  background: var(--surface-sunken); display: flex; flex-direction: column; gap: 10px;
+}
+.editable-section-toolbar { display: flex; align-items: center; gap: 8px; }
+.editable-section-num {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: #161616; font-weight: 700; font-size: 0.78rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.editable-section-heading { flex: 1; font-weight: 700; padding: 10px 12px; border-radius: 12px; }
+.editable-section-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.editable-section-actions button {
+  width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.96); color: var(--text); cursor: pointer; font-size: 0.85rem;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.editable-section-actions button:hover:not(:disabled) { background: var(--surface-sunken); }
+.editable-section-actions button:disabled { opacity: 0.35; cursor: not-allowed; }
+.editable-regen { width: auto !important; padding: 0 10px !important; font-weight: 700; font-size: 0.76rem !important; white-space: nowrap; }
+.editable-remove:hover:not(:disabled) { color: #dc2626; border-color: rgba(220, 38, 38, 0.4) !important; }
+.editable-section-body { border-radius: 12px; min-height: 84px; font-size: 0.9rem; line-height: 1.6; }
+.editable-add-between {
+  align-self: flex-start; padding: 4px 10px; border: 1px dashed var(--line);
+  border-radius: var(--radius-pill); background: transparent; color: var(--muted);
+  font-size: 0.76rem; cursor: pointer;
+}
+.editable-add-between:hover { color: var(--text); border-color: var(--accent-strong); }
+.editable-draft-footer { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.editable-draft-footer .primary-button { flex: 1; min-width: 180px; }
+
+/* Skeleton for the optimistic draft (review UX-05) */
+.editable-section.is-skeleton { gap: 12px; }
+.skeleton-heading { font-weight: 700; color: var(--muted); }
+.skeleton-lines { display: flex; flex-direction: column; gap: 8px; }
+.skeleton-line {
+  height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.96) 25%, var(--line) 37%, rgba(255, 255, 255, 0.96) 63%);
+  background-size: 400% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line.short { width: 55%; }
+@keyframes skeletonShimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; }
+}
+
+/* Build success flourish (review UX-11) */
+.build-success-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  animation: successPop 0.35s ease-out;
+}
+@keyframes successPop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .build-success-badge { animation: none; }
+}
