@@ -25,8 +25,18 @@ export default function App() {
   const [goal, setGoal] = useState('업로드한 문서의 핵심 내용을 바탕으로 임원 검토용 초안을 만들어 주세요.')
   const [notes, setNotes] = useState('핵심 메시지는 유지하고, 목차는 더 명확하게 재구성해 주세요.')
   const [targetTitle, setTargetTitle] = useState('')
+  const [docFields, setDocFields] = useState({})
   const [showSettings, setShowSettings] = useState(false)
   const [editing, setEditing] = useState(false)
+
+  // Reset type-specific fields when the document type changes.
+  function handleDocTypeChange(next) {
+    setDocType(next)
+    setDocFields({})
+  }
+  function setDocField(key, value) {
+    setDocFields((prev) => ({ ...prev, [key]: value }))
+  }
 
   const { user, logout, loginWithPopup } = useAuth()
   const {
@@ -94,7 +104,7 @@ export default function App() {
 
   // Shared context for section-level regenerate + build (review PO-01).
   function draftContext() {
-    return { docType, companyName, goal, notes, sourceText: sourceInsight.extractedText, aiProvider, model: aiModel }
+    return { docType, companyName, goal, notes, docFields, sourceText: sourceInsight.extractedText, aiProvider, model: aiModel }
   }
 
   // Step 1 of the loop: generate the draft, then hand off to the editor for
@@ -108,7 +118,7 @@ export default function App() {
       return
     }
     const next = await generateDraft({
-      sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle,
+      sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle, docFields,
       aiProvider, aiModel, aiApiKey, onOptimistic: scrollToPreview
     })
     if (!next) {
@@ -254,7 +264,8 @@ export default function App() {
           onFileSelect={handleFileSelect}
           sourceFile={sourceFile}
           sourceInsight={sourceInsight}
-          docType={docType} setDocType={setDocType}
+          docType={docType} setDocType={handleDocTypeChange}
+          docFields={docFields} setDocField={setDocField}
           activeModels={activeModels} aiModel={aiModel} setAiModel={setAiModel}
           companyName={companyName} setCompanyName={setCompanyName}
           targetTitle={targetTitle} setTargetTitle={setTargetTitle}
