@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE_NAME
 } from '../lib/session.js'
 import { escapeXml } from '../../shared/escape.js'
+import { logger } from '../lib/logger.js'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || ''
@@ -118,7 +119,7 @@ router.get('/auth/google', (_req, res) => {
     const missing = []
     if (!CLIENT_ID_CONFIGURED) missing.push('GOOGLE_CLIENT_ID')
     if (!CLIENT_SECRET_CONFIGURED) missing.push('GOOGLE_CLIENT_SECRET')
-    console.warn('[googleAuth] 설정 누락:', missing.join(', '))
+    logger.warn({ missing }, 'googleAuth 설정 누락')
     return res.status(200).send(mockLoginPage())
   }
   const state = crypto.randomBytes(16).toString('hex')

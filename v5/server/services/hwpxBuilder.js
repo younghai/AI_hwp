@@ -8,6 +8,8 @@ import { createHttpError } from '../lib/errors.js'
 import { generatedDir, getDb, listGeneratedFilesBySid } from '../lib/db.js'
 import { runProcess, slugify, sanitizeName } from '../lib/utils.js'
 import { decodeOriginalName, assertValidUpload } from '../lib/upload.js'
+import { logger } from '../lib/logger.js'
+import { record } from '../lib/metrics.js'
 import { validateHwpx } from './validator.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -320,7 +322,7 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
       sectionsJsonPath = path.join(workDir, `${crypto.randomUUID()}-sections.json`)
       await fs.writeFile(sectionsJsonPath, JSON.stringify(combined), 'utf-8')
     } catch (err) {
-      console.warn('sections JSON parse failed:', err.message)
+      logger.warn({ err: err.message }, 'sections JSON parse failed')
     }
   }
   reportJsonPath = path.join(workDir, `${crypto.randomUUID()}-diagram-report.json`)
@@ -347,6 +349,7 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
       }
     : undefined
 
+  const buildStarted = Date.now()
   let result
   let diagramReport = null
   try {
@@ -365,12 +368,13 @@ export async function buildHwpx({ sessionId, title, rawToc, sourceMode, sourceFi
     if (sectionsJsonPath) fs.unlink(sectionsJsonPath).catch(() => {})
     if (reportJsonPath) fs.unlink(reportJsonPath).catch(() => {})
   }
+  record('hwpx_build', { ok: result.ok, ms: Date.now() - buildStarted })
 
   if (!result.ok) {
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {})
     // Never surface raw stderr/traceback to the user (CLAUDE.md R4). The full
     // stderr is preserved in server logs for debugging.
-    if (result.stderr) console.error('[hwpxBuilder] build_hwpx worker failed:', result.stderr)
+    if (result.stderr) logger.error({ stderr: result.stderr }, 'build_hwpx worker failed')
     const { message, status } = parseWorkerError(result.stdout)
     throw createHttpError(message, status)
   }

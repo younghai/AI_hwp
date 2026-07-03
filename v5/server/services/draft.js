@@ -4,6 +4,7 @@ import { AI_PROVIDERS, resolveModel } from '../lib/providers-config.js'
 import { createHttpError } from '../lib/errors.js'
 import { getSessionProviderSecret } from '../lib/session.js'
 import { callAnthropic, callOpenAICompatible } from './ai.js'
+import { record } from '../lib/metrics.js'
 
 function buildPrompt({ effectiveText, hasUploadedTemplate, title, docLabel, companyName, goal, notes, fallbackToc, templateBodySlots, guidance, docFieldLines }) {
   const typeBlock = [
@@ -163,8 +164,10 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     }
   }
   if (!validated) {
+    record('ai_draft', { ok: false, ms: Date.now() - startedAt })
     throw lastError || createHttpError('AI 응답을 처리할 수 없습니다.', 502)
   }
+  record('ai_draft', { ok: true, ms: Date.now() - startedAt })
   const elapsedMs = Date.now() - startedAt
   // Prefer provider-reported token counts; fall back to a char-based estimate
   // (한국어 ≈ 1.5, 영어 ≈ 4 chars/token → conservative /3) when absent (review PO-05).
