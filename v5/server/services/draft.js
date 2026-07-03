@@ -1,6 +1,6 @@
 import { tryExtractJson, validateDraftPayload, ValidationError } from '../../shared/validate.js'
 import { buildToc, deriveTitle, labelForDocType } from '../../shared/docTypes.js'
-import { AI_PROVIDERS } from '../lib/providers-config.js'
+import { AI_PROVIDERS, resolveModel } from '../lib/providers-config.js'
 import { createHttpError } from '../lib/errors.js'
 import { getSessionProviderSecret } from '../lib/session.js'
 import { callAnthropic, callOpenAICompatible } from './ai.js'
@@ -103,18 +103,15 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     effectiveText, hasUploadedTemplate, title, docLabel, companyName, goal, notes, fallbackToc, templateBodySlots
   })
 
+  const chosenModel = resolveModel(provider, input.model)
   const callOnce = () => providerKey === 'anthropic'
-    ? callAnthropic(provider, apiKey, prompt)
-    : callOpenAICompatible(provider, apiKey, prompt)
+    ? callAnthropic(provider, apiKey, prompt, { model: chosenModel.id })
+    : callOpenAICompatible(provider, apiKey, prompt, { model: chosenModel.id, jsonMode: provider.jsonMode })
 
-  // v4: AI 비용/시간 측정용 (provider별 대략적 단가 — 정확한 토큰은 응답에 따라 다름)
-  // 단위: USD per 1M tokens (input, output) — 2025-10 시점 공개 단가 근사
-  const PRICING_USD_PER_M = {
-    anthropic: { in: 15, out: 75 },        // Claude Opus 4.7 (대략)
-    openai:    { in: 2.5, out: 10 },       // gpt-4o (대략)
-    kimi:      { in: 0.5, out: 2 },        // moonshot-v1 (대략)
-    xai:       { in: 0.3, out: 0.5 }       // grok-3-mini (대략)
-  }
+  let realUsage = null
+
+  // Per-model pricing (USD / 1M tokens) resolved from providers-config.
+  const pricing = { in: chosenModel.priceIn || 0, out: chosenModel.priceOut || 0 }
   const startedAt = Date.now()
   let attempts = 0
   let validated = null
@@ -124,8 +121,10 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     attempts += 1
     let text
     try {
-      text = await callOnce()
+      const res = await callOnce()
+      text = res.text
       lastResponseText = text
+      if (res.usage) realUsage = res.usage
     } catch (err) {
       lastError = createHttpError(`AI 호출 실패: ${err.message}`, 502)
       continue
@@ -150,10 +149,11 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     throw lastError || createHttpError('AI 응답을 처리할 수 없습니다.', 502)
   }
   const elapsedMs = Date.now() - startedAt
-  // 토큰 추정: 영어 4 chars/token, 한국어 1.5 chars/token. 보수적으로 prompt/answer 길이 / 3.
-  const estInputTokens = Math.ceil(prompt.length / 3)
-  const estOutputTokens = Math.ceil(lastResponseText.length / 3)
-  const pricing = PRICING_USD_PER_M[providerKey] || { in: 0, out: 0 }
+  // Prefer provider-reported token counts; fall back to a char-based estimate
+  // (한국어 ≈ 1.5, 영어 ≈ 4 chars/token → conservative /3) when absent (review PO-05).
+  const estInputTokens = realUsage?.inputTokens ?? Math.ceil(prompt.length / 3)
+  const estOutputTokens = realUsage?.outputTokens ?? Math.ceil(lastResponseText.length / 3)
+  const tokensMeasured = Boolean(realUsage)
   const estCostUsd = (estInputTokens * pricing.in + estOutputTokens * pricing.out) / 1_000_000
 
   const lines = effectiveText
@@ -167,8 +167,10 @@ export async function buildDraftWithAI(input, { sessionId } = {}) {
     attempts,
     estInputTokens,
     estOutputTokens,
+    tokensMeasured,
     estCostUsd: Number(estCostUsd.toFixed(4)),
-    provider: provider.label
+    provider: provider.label,
+    model: chosenModel.id
   }
 
   return {

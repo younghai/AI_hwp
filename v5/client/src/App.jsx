@@ -38,7 +38,8 @@ export default function App() {
   const { toasts, dismiss, success, error: errorToast, info, warning } = useToast()
 
   const {
-    providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured
+    providers, aiProvider, setAiProvider, refresh: refreshProviders, activeProvider, hasConfigured,
+    aiModel, setAiModel, activeModels
   } = useProviders((err) => {
     console.warn('providers fetch failed', err)
     errorToast('AI provider 목록을 불러오지 못했습니다.')
@@ -97,7 +98,7 @@ export default function App() {
     }
     const next = await generateDraft({
       sourceFile, sourceInsight, docType, companyName, goal, notes, targetTitle,
-      aiProvider, aiApiKey, onOptimistic: scrollToPreview
+      aiProvider, aiModel, aiApiKey, onOptimistic: scrollToPreview
     })
     if (!next) {
       scrollToPreview()
@@ -225,6 +226,7 @@ export default function App() {
           sourceFile={sourceFile}
           sourceInsight={sourceInsight}
           docType={docType} setDocType={setDocType}
+          activeModels={activeModels} aiModel={aiModel} setAiModel={setAiModel}
           companyName={companyName} setCompanyName={setCompanyName}
           targetTitle={targetTitle} setTargetTitle={setTargetTitle}
           goal={goal} setGoal={setGoal}
