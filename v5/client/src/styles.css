@@ -9,7 +9,19 @@
   --accent-strong: #ffcb05;
   --accent-soft: #fff6c7;
   --ink: #101010;
+  /* Semantic surfaces — themed so text keeps ≥4.5:1 contrast in dark mode.
+     Before these, opaque #fff/light-rgba backgrounds paired with the dark-mode
+     light --text produced ~1.2:1 (unreadable). See review UX-01. */
+  --surface: #ffffff;            /* raised cards: modal, toast, sample cards */
   --surface-sunken: rgba(255, 255, 255, 0.96); /* inputs, meta cells, draft articles */
+  --surface-stage: linear-gradient(180deg, #f7f2e8 0%, #f0eadf 100%); /* parsed doc stage */
+  --paper: #ffffff;              /* rendered document pages — stay white in both themes */
+  --field-border: rgba(20, 36, 50, 0.16);
+  --overlay-hover: rgba(0, 0, 0, 0.06);
+  --eyebrow: #8f7044;
+  --download-ink: #5b4b09;
+  --font-sans: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Malgun Gothic', 'Noto Sans KR', system-ui, sans-serif;
+  --mono: 'SF Mono', 'JetBrains Mono', 'D2Coding', ui-monospace, 'Courier New', monospace;
   --radius-sm: 14px;
   --radius-md: 24px;
   --radius-lg: 34px;
@@ -28,7 +40,14 @@
     --accent-strong: #ffb300;
     --accent-soft: #3d3418;
     --ink: #f0f0f0;
+    --surface: #262626;
     --surface-sunken: rgba(255, 255, 255, 0.05);
+    --surface-stage: linear-gradient(180deg, #2a2a2a 0%, #1f1f1f 100%);
+    --paper: #ffffff;
+    --field-border: rgba(255, 255, 255, 0.16);
+    --overlay-hover: rgba(255, 255, 255, 0.1);
+    --eyebrow: #d3b98a;
+    --download-ink: #f0d98a;
     --shadow: 0 30px 70px rgba(0, 0, 0, 0.3);
   }
 
@@ -46,7 +65,7 @@
 
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
+  font-family: var(--font-sans);
   color: var(--text);
   background:
     radial-gradient(circle at top left, rgba(255, 212, 56, 0.2), transparent 24%),
