@@ -1,0 +1,24 @@
+{
+  "name": "calendar-app-v5",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently \"pnpm --dir server dev\" \"pnpm --dir client dev\"",
+    "dev:auto": "concurrently \"PORT=8795 CLIENT_ORIGIN=http://127.0.0.1:5195 OAUTH_REDIRECT_BASE=http://127.0.0.1:8795 pnpm --dir server dev\" \"VITE_SERVER_PORT=8795 VITE_AUTO_LOGIN=true pnpm --dir client dev:auto\"",
+    "dev:client": "pnpm --dir client dev",
+    "dev:server": "pnpm --dir server dev",
+    "build": "pnpm --dir client build",
+    "postinstall": "bash scripts/setup-rhwp-symlink.sh"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7"
+  }
+}
